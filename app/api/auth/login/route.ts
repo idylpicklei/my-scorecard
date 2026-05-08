@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  createSessionForUser,
-  findUserByEmail,
-  SESSION_COOKIE_NAME,
-} from "@/lib/auth/local-db";
-import { verifyPassword } from "@/lib/auth/password";
+import { verifyUserPassword } from "@/lib/auth/supabase";
 
 export const runtime = "nodejs";
 
@@ -26,32 +21,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const user = await findUserByEmail(email);
-  if (!user || !verifyPassword(password, user.passwordHash)) {
+  const result = await verifyUserPassword(email, password);
+  if (!result) {
     return NextResponse.json(
       { error: "Invalid email or password." },
       { status: 401 },
     );
   }
 
-  const { token, expiresAt } = await createSessionForUser(user.id);
   const response = NextResponse.json({
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-    },
-  });
-
-  response.cookies.set({
-    name: SESSION_COOKIE_NAME,
-    value: token,
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    expires: new Date(expiresAt),
+    user: result.user,
   });
 
   return response;

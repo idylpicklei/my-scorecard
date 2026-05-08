@@ -1,43 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { deleteSessionByToken, SESSION_COOKIE_NAME } from "@/lib/auth/local-db";
+import { createClient } from "@/utils/supabase/server";
+import { cookies } from "next/headers";
 
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {
-    const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+    const cookieStore = await cookies();
+    const supabase = createClient(cookieStore);
 
-    if (token) {
-      await deleteSessionByToken(token);
-    }
+    await supabase.auth.signOut();
 
-    const response = NextResponse.json({ ok: true });
-    response.cookies.set({
-      name: SESSION_COOKIE_NAME,
-      value: "",
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 0,
-    });
-
-    return response;
+    return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Logout error:", error);
-    const response = NextResponse.json(
+    return NextResponse.json(
       { error: "Logout failed" },
       { status: 500 },
     );
-    response.cookies.set({
-      name: SESSION_COOKIE_NAME,
-      value: "",
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 0,
-    });
-    return response;
   }
 }
