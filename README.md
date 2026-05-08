@@ -1,8 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is a Next.js app for tracking golf scores with friends.
+
+## Local Authentication
+
+The app now includes a local auth system with:
+
+- A login page at `/login`
+- Auth API endpoints at `/api/auth/login`, `/api/auth/logout`, and `/api/auth/me`
+- An on-disk local auth store at `data/auth-db.json`
+- Cookie-based sessions (`myscorecard_session`)
+
+On first run, a default user is seeded into the local auth store.
+
+Default credentials:
+
+- Email: `friends@myscorecard.local`
+- Password: `golfweekend`
+
+Default admin credentials:
+
+- Email: `admin@myscorecard.local`
+- Password: `adminweekend`
+
+You can override these with environment variables in `.env.local`:
+
+```bash
+LOCAL_AUTH_EMAIL=friends@myscorecard.local
+LOCAL_AUTH_NAME=Weekend Golfer
+LOCAL_AUTH_PASSWORD=golfweekend
+LOCAL_ADMIN_EMAIL=admin@myscorecard.local
+LOCAL_ADMIN_NAME=Trip Admin
+LOCAL_ADMIN_PASSWORD=adminweekend
+```
+
+Admin users can:
+
+- Create upcoming trip schedule items
+- Set team player assignments (Team Idaho / Team Oregon or custom names)
+
+All authenticated users can view the upcoming schedule and current teams.
 
 ## Getting Started
 
-First, run the development server:
+Run the development server:
 
 ```bash
 npm run dev
@@ -16,21 +55,11 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+If you are not authenticated, you will be redirected to `/login`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+After login, the home page is session-protected.
 
-## Learn More
+## Notes
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- This local auth store is intended for development and early prototyping.
+- For production, move to a managed auth solution and a proper shared database.

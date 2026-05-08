@@ -1,0 +1,65 @@
+{
+  "users": [
+    {
+      "id": "8fe6613f-395b-4826-a582-202b31d00c7f",
+      "email": "friends@myscorecard.local",
+      "name": "Weekend Golfer",
+      "passwordHash": "b434089813c6bafa398cec8d85e5e172:107547014055f637174ed9745cf9b78cbc369c32c5599edc448f053b5f9b47171d31992addd009d27fc6f2ff8edb966bfd3d10ccd7fe5a4a37e404f253b5ea56",
+      "createdAt": "2026-05-07T21:24:02.259Z",
+      "role": "member"
+    },
+    {
+      "id": "25d36b7a-891b-4ad4-86a5-aef4f7c92059",
+      "email": "admin@myscorecard.local",
+      "name": "Trip Admin",
+      "role": "admin",
+      "passwordHash": "18b77a3a3dd9c0173755ef18ba5bb541:bc81ea7b66add3f81bf9bfd9088872ca550cf1909588386b45a9e3f416fcc020e74a99b124258218525d3290648385081a935588377271cf1dc8f95144e422f4",
+      "createdAt": "2026-05-07T21:41:08.100Z"
+    }
+  ],
+  "sessions": [
+    {
+      "id": "499de023-40cd-44ef-af15-575a44625c9b",
+      "tokenHash": "cc46c0e4bfbd90a16a0adfc68576033d306499b5f25f0ec09ea95070fd98efd8",
+      "userId": "25d36b7a-891b-4ad4-86a5-aef4f7c92059",
+      "expiresAt": "2026-05-14T21:42:10.603Z",
+      "createdAt": "2026-05-07T21:42:10.603Z"
+    }
+  ],
+  "teams": [
+    {
+      "id": "team-idaho-001",
+      "name": "Team Idaho",
+      "players": [
+        "Kody",
+        "Ty"
+      ]
+    },
+    {
+      "id": "team-oregon-001",
+      "name": "Team Oregon",
+      "players": [
+        "Mitch",
+        "Ryan"
+      ]
+    }
+  ],
+  "schedule": [
+    {
+      "id": "schedule-001",
+      "title": "Friday Warmup Round",
+      "course": "Timberline Golf Club",
+      "date": "2026-05-22",
+      "notes": "Tee time at 1:10 PM",
+      "createdAt": "2026-05-07T21:41:07.883Z"
+    },
+    {
+      "id": "schedule-002",
+      "title": "Saturday Team Match",
+      "course": "River Bend Links",
+      "date": "2026-05-23",
+      "notes": "Idaho vs Oregon front/back Nassau",
+      "createdAt": "2026-05-07T21:41:07.883Z"
+    }
+  ]
+}
