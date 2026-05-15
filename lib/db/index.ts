@@ -10,7 +10,32 @@ import {
 } from "@/drizzle/schema";
 import { getDb } from "@/lib/db/client";
 import { seedDatabaseIfEmpty } from "@/lib/db/seed";
+import {
+  endActiveWeekend,
+  findScheduleEntryIdForScorecard,
+  getActiveWeekend,
+  getWeekendDashboardData,
+  listWeekends,
+  requireActiveWeekendId,
+  startNewWeekend,
+} from "@/lib/db/weekends";
 import { hashPassword } from "@/lib/auth/password";
+import { TRIP_PLAYERS, TRIP_PLAYER_HANDICAPS } from "@/lib/trip-roster";
+import {
+  isValidUsername,
+  normalizeUsername,
+  usernameFromName,
+} from "@/lib/auth/username";
+
+export type { WeekendSummary, WeekendStatus } from "@/lib/db/weekends";
+export {
+  endActiveWeekend,
+  getActiveWeekend,
+  getWeekendDashboardData,
+  listWeekends,
+  requireActiveWeekendId,
+  startNewWeekend,
+} from "@/lib/db/weekends";
 
 export const SESSION_COOKIE_NAME = "myscorecard_session";
 
@@ -46,8 +71,10 @@ export type Scorecard = {
 
 export type PublicUser = {
   id: string;
+  username: string;
   email: string;
   name: string;
+  handicap: number;
   role: UserRole;
 };
 
@@ -72,8 +99,10 @@ function hashSessionToken(token: string): string {
 function toPublicUser(user: UserRecord): PublicUser {
   return {
     id: user.id,
+    username: user.username,
     email: user.email,
     name: user.name,
+    handicap: user.handicap,
     role: user.role,
   };
 }
@@ -81,12 +110,35 @@ function toPublicUser(user: UserRecord): PublicUser {
 function mapUser(row: typeof users.$inferSelect): UserRecord {
   return {
     id: row.id,
+    username: row.username,
     email: row.email,
     name: row.name,
+    handicap: row.handicap,
     role: row.role,
     passwordHash: row.passwordHash,
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+export async function getTripPlayerHandicaps(): Promise<Record<string, number>> {
+  await ensureDatabaseReady();
+  const db = getDb();
+  const rows = await db.select().from(users);
+  const handicaps: Record<string, number> = { ...TRIP_PLAYER_HANDICAPS };
+
+  for (const player of TRIP_PLAYERS) {
+    const playerKey = player.toLowerCase();
+    const match = rows.find(
+      (row) =>
+        row.name.toLowerCase() === playerKey ||
+        row.username.toLowerCase() === playerKey,
+    );
+    if (match) {
+      handicaps[player] = match.handicap;
+    }
+  }
+
+  return handicaps;
 }
 
 function mapSchedule(row: typeof scheduleEntries.$inferSelect): ScheduleEntry {
@@ -121,30 +173,62 @@ export async function findUserByEmail(email: string): Promise<UserRecord | null>
   return row ? mapUser(row) : null;
 }
 
+export async function findUserByUsername(username: string): Promise<UserRecord | null> {
+  await ensureDatabaseReady();
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(users)
+    .where(eq(users.username, normalizeUsername(username)))
+    .limit(1);
+  return row ? mapUser(row) : null;
+}
+
+export async function findUserByLogin(login: string): Promise<UserRecord | null> {
+  const trimmed = login.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.includes("@")) {
+    return findUserByEmail(trimmed);
+  }
+
+  return findUserByUsername(trimmed);
+}
+
 export async function createUser(input: {
+  username: string;
   email: string;
   name: string;
   password: string;
+  handicap?: number;
 }): Promise<PublicUser | null> {
   await ensureDatabaseReady();
   const db = getDb();
   const normalizedEmail = input.email.trim().toLowerCase();
   const name = input.name.trim();
+  const username = normalizeUsername(input.username);
 
-  if (!normalizedEmail || !name) {
+  if (!normalizedEmail || !name || !isValidUsername(username)) {
     return null;
   }
 
-  const existing = await findUserByEmail(normalizedEmail);
-  if (existing) {
+  if (await findUserByEmail(normalizedEmail)) {
+    return null;
+  }
+
+  if (await findUserByUsername(username)) {
     return null;
   }
 
   const [row] = await db
     .insert(users)
     .values({
+      username,
       email: normalizedEmail,
       name,
+      handicap: input.handicap ?? 0,
       role: "member",
       passwordHash: hashPassword(input.password),
     })
@@ -204,36 +288,35 @@ export async function getAuthUserFromRequestToken(
 export async function getDashboardConfiguration(): Promise<{
   teams: DashboardTeam[];
   schedule: ScheduleEntry[];
+  activeWeekend: Awaited<ReturnType<typeof getActiveWeekend>>;
 }> {
   await ensureDatabaseReady();
-  const db = getDb();
+  const activeWeekend = await getActiveWeekend();
 
-  const teamRows = await db.select().from(teamsTable);
-  const scheduleRows = await db
-    .select()
-    .from(scheduleEntries)
-    .orderBy(asc(scheduleEntries.date));
+  if (!activeWeekend) {
+    return { teams: [], schedule: [], activeWeekend: null };
+  }
 
+  const data = await getWeekendDashboardData(activeWeekend.id);
   return {
-    teams: teamRows.map((team) => ({
-      id: team.id,
-      name: team.name,
-      players: team.players,
-    })),
-    schedule: scheduleRows.map(mapSchedule),
+    teams: data.teams,
+    schedule: data.schedule,
+    activeWeekend,
   };
 }
 
 export async function setTeams(teams: DashboardTeam[]): Promise<DashboardTeam[]> {
   await ensureDatabaseReady();
+  const weekendId = await requireActiveWeekendId();
   const db = getDb();
 
   await db.transaction(async (tx) => {
-    await tx.delete(teamsTable);
+    await tx.delete(teamsTable).where(eq(teamsTable.weekendId, weekendId));
     if (teams.length > 0) {
       await tx.insert(teamsTable).values(
         teams.map((team) => ({
           id: team.id,
+          weekendId,
           name: team.name,
           players: team.players,
         })),
@@ -251,11 +334,13 @@ export async function addScheduleEntry(entry: {
   notes?: string;
 }): Promise<ScheduleEntry> {
   await ensureDatabaseReady();
+  const weekendId = await requireActiveWeekendId();
   const db = getDb();
 
   const [row] = await db
     .insert(scheduleEntries)
     .values({
+      weekendId,
       title: entry.title,
       course: entry.course,
       date: entry.date,
@@ -272,11 +357,19 @@ export async function saveScorecard(scorecard: {
   players: PlayerScores[];
 }): Promise<Scorecard> {
   await ensureDatabaseReady();
+  const weekendId = await requireActiveWeekendId();
+  const scheduleEntryId = await findScheduleEntryIdForScorecard(
+    weekendId,
+    scorecard.date,
+    scorecard.course,
+  );
   const db = getDb();
 
   const [row] = await db
     .insert(scorecards)
     .values({
+      weekendId,
+      scheduleEntryId,
       course: scorecard.course,
       date: scorecard.date,
       players: scorecard.players,
@@ -288,10 +381,15 @@ export async function saveScorecard(scorecard: {
 
 export async function getScorecards(): Promise<Scorecard[]> {
   await ensureDatabaseReady();
-  const db = getDb();
+  const weekendId = await requireActiveWeekendId();
+  const data = await getWeekendDashboardData(weekendId);
+  return data.scorecards;
+}
 
-  const rows = await db.select().from(scorecards).orderBy(desc(scorecards.date));
-  return rows.map(mapScorecard);
+export async function getScorecardsForWeekend(weekendId: string): Promise<Scorecard[]> {
+  await ensureDatabaseReady();
+  const data = await getWeekendDashboardData(weekendId);
+  return data.scorecards;
 }
 
 export async function deleteSessionByToken(token: string): Promise<void> {
@@ -307,11 +405,11 @@ export async function deleteSessionByToken(token: string): Promise<void> {
 const PASSWORD_RESET_HOURS = 1;
 
 export async function createPasswordResetToken(
-  email: string,
+  login: string,
 ): Promise<{ token: string; expiresAt: string } | null> {
   await ensureDatabaseReady();
   const db = getDb();
-  const user = await findUserByEmail(email);
+  const user = await findUserByLogin(login);
 
   if (!user) {
     return null;

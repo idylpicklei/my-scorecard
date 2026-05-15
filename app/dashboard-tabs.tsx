@@ -1,8 +1,16 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { DashboardOverview } from "@/app/dashboard-overview";
+import { TRIP_PLAYERS } from "@/lib/trip-roster";
 
-type DashboardTab = "scoreboard" | "upload" | "schedule" | "games";
+type DashboardTab =
+  | "overview"
+  | "scoreboard"
+  | "upload"
+  | "schedule"
+  | "games"
+  | "weekends";
 
 type UserRole = "admin" | "member";
 
@@ -12,10 +20,12 @@ type TabConfig = {
 };
 
 const TABS: TabConfig[] = [
+  { id: "overview", label: "Overview" },
   { id: "scoreboard", label: "Score Board" },
   { id: "upload", label: "Upload Scorecard" },
   { id: "schedule", label: "Schedule" },
   { id: "games", label: "Games" },
+  { id: "weekends", label: "Weekends" },
 ];
 
 type ScoreRow = {
@@ -40,12 +50,55 @@ type ScheduleItem = {
   createdAt: string;
 };
 
-const SCORE_ROWS: ScoreRow[] = [
-  { player: "Kody", front9: 43, back9: 41 },
-  { player: "Mitch", front9: 46, back9: 44 },
-  { player: "Ty", front9: 45, back9: 46 },
-  { player: "Ryan", front9: 48, back9: 45 },
-];
+type ScorecardPlayer = {
+  playerName: string;
+  holes: number[];
+};
+
+type SavedScorecard = {
+  id: string;
+  course: string;
+  date: string;
+  players: ScorecardPlayer[];
+  createdAt: string;
+};
+
+function emptyScoreRows(): ScoreRow[] {
+  return TRIP_PLAYERS.map((player) => ({
+    player,
+    front9: 0,
+    back9: 0,
+  }));
+}
+
+function scorecardToRows(scorecard: SavedScorecard): ScoreRow[] {
+  const rowByPlayer = new Map<string, ScoreRow>();
+
+  for (const entry of scorecard.players) {
+    const front9 = entry.holes.slice(0, 9).reduce((sum, score) => sum + score, 0);
+    const back9 = entry.holes.slice(9, 18).reduce((sum, score) => sum + score, 0);
+    rowByPlayer.set(entry.playerName.trim().toLowerCase(), {
+      player: entry.playerName.trim(),
+      front9,
+      back9,
+    });
+  }
+
+  return TRIP_PLAYERS.map((player) => {
+    const match = rowByPlayer.get(player.toLowerCase());
+    if (!match) {
+      return { player, front9: 0, back9: 0 };
+    }
+    return { player, front9: match.front9, back9: match.back9 };
+  });
+}
+
+function defaultScorecardPlayers() {
+  return TRIP_PLAYERS.map((playerName) => ({
+    playerName,
+    holes: Array(18).fill(0),
+  }));
+}
 
 const GAMES = [
   {
@@ -65,17 +118,35 @@ const GAMES = [
   },
 ];
 
+type WeekendSummary = {
+  id: string;
+  title: string;
+  startDate: string;
+  endDate: string | null;
+  status: "active" | "completed";
+  roundsScheduled: number;
+  roundsCompleted: number;
+  roundsLeft: number;
+  createdAt: string;
+};
+
 type DashboardResponse = {
+  user: { name: string; username: string; handicap: number };
   teams: Team[];
   schedule: ScheduleItem[];
+  handicapsByPlayer: Record<string, number>;
+  activeWeekend: WeekendSummary | null;
+  pastWeekends: WeekendSummary[];
 };
 
 type DashboardTabsProps = {
   userRole: UserRole;
+  currentUser: { name: string; username: string; handicap: number };
 };
 
-export function DashboardTabs({ userRole }: DashboardTabsProps) {
-  const [activeTab, setActiveTab] = useState<DashboardTab>("scoreboard");
+export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
+  const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
+  const [handicapsByPlayer, setHandicapsByPlayer] = useState<Record<string, number>>({});
   const [teams, setTeamsState] = useState<Team[]>([]);
   const [teamDraft, setTeamDraft] = useState<Team[]>([]);
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
@@ -84,13 +155,8 @@ export function DashboardTabs({ userRole }: DashboardTabsProps) {
   const [isSavingTeams, setIsSavingTeams] = useState(false);
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
   const [isSavingScorecard, setIsSavingScorecard] = useState(false);
-  const [scoreCardPlayers, setScorecardPlayers] = useState<Array<{
-    playerName: string;
-    holes: number[];
-  }>>([
-    { playerName: "", holes: Array(18).fill(0) },
-    { playerName: "", holes: Array(18).fill(0) },
-  ]);
+  const [scoreRows, setScoreRows] = useState<ScoreRow[]>(emptyScoreRows);
+  const [scoreCardPlayers, setScorecardPlayers] = useState(defaultScorecardPlayers);
   const [scorecardForm, setScorecardForm] = useState({
     course: "",
     date: "",
@@ -101,37 +167,71 @@ export function DashboardTabs({ userRole }: DashboardTabsProps) {
     date: "",
     notes: "",
   });
+  const [activeWeekend, setActiveWeekend] = useState<WeekendSummary | null>(null);
+  const [pastWeekends, setPastWeekends] = useState<WeekendSummary[]>([]);
+  const [isStartingWeekend, setIsStartingWeekend] = useState(false);
+  const [isEndingWeekend, setIsEndingWeekend] = useState(false);
+  const [weekendForm, setWeekendForm] = useState({
+    title: "",
+    startDate: "",
+    endDate: "",
+  });
+  const [endWeekendDate, setEndWeekendDate] = useState("");
 
-  useEffect(() => {
-    async function loadDashboard() {
-      setIsLoading(true);
-      setError(null);
+  async function loadDashboard() {
+    setIsLoading(true);
+    setError(null);
 
-      const response = await fetch("/api/dashboard", { cache: "no-store" });
-      if (!response.ok) {
-        setError("Unable to load team and schedule data.");
-        setIsLoading(false);
-        return;
-      }
-
-      const payload = (await response.json()) as DashboardResponse;
-      setTeamsState(payload.teams);
-      setTeamDraft(payload.teams);
-      setSchedule(payload.schedule);
+    const response = await fetch("/api/dashboard", { cache: "no-store" });
+    if (!response.ok) {
+      setError("Unable to load weekend dashboard data.");
       setIsLoading(false);
+      return;
     }
 
+    const payload = (await response.json()) as DashboardResponse;
+    setTeamsState(payload.teams);
+    setTeamDraft(payload.teams);
+    setSchedule(payload.schedule);
+    setHandicapsByPlayer(payload.handicapsByPlayer);
+    setActiveWeekend(payload.activeWeekend);
+    setPastWeekends(payload.pastWeekends ?? []);
+
+    const scorecardsResponse = await fetch("/api/scorecards", { cache: "no-store" });
+    if (scorecardsResponse.ok) {
+      const scorecardsPayload = (await scorecardsResponse.json()) as {
+        scorecards: SavedScorecard[];
+      };
+      const latest = scorecardsPayload.scorecards[0];
+      if (latest) {
+        setScoreRows(scorecardToRows(latest));
+      }
+    }
+
+    setIsLoading(false);
+  }
+
+  useEffect(() => {
     void loadDashboard();
   }, []);
 
   const leaderboard = useMemo(() => {
-    return [...SCORE_ROWS]
+    return [...scoreRows]
       .map((entry) => ({
         ...entry,
         total: entry.front9 + entry.back9,
+        hasScores: entry.front9 > 0 || entry.back9 > 0,
       }))
-      .sort((a, b) => a.total - b.total);
-  }, []);
+      .sort((a, b) => {
+        if (a.hasScores && !b.hasScores) return -1;
+        if (!a.hasScores && b.hasScores) return 1;
+        if (!a.hasScores && !b.hasScores) {
+          return TRIP_PLAYERS.indexOf(a.player as (typeof TRIP_PLAYERS)[number])
+            - TRIP_PLAYERS.indexOf(b.player as (typeof TRIP_PLAYERS)[number]);
+        }
+        return a.total - b.total;
+      });
+  }, [scoreRows]);
 
   const teamScores = useMemo(() => {
     const scoreByPlayer = new Map(
@@ -240,18 +340,81 @@ export function DashboardTabs({ userRole }: DashboardTabsProps) {
       return;
     }
 
+    const payload = (await response.json()) as { scorecard: SavedScorecard };
+    setScoreRows(scorecardToRows(payload.scorecard));
+
     setScorecardForm({ course: "", date: "" });
-    setScorecardPlayers([
-      { playerName: "", holes: Array(18).fill(0) },
-      { playerName: "", holes: Array(18).fill(0) },
-    ]);
+    setScorecardPlayers(defaultScorecardPlayers());
     setIsSavingScorecard(false);
+    await loadDashboard();
+  }
+
+  async function handleEndWeekend() {
+    if (!activeWeekend) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `End "${activeWeekend.title}"? Scores stay saved; you can start a new weekend when ready.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setIsEndingWeekend(true);
+    setError(null);
+
+    const response = await fetch("/api/admin/weekends", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        endDate: endWeekendDate || undefined,
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      setError(payload?.error ?? "Unable to end the weekend.");
+      setIsEndingWeekend(false);
+      return;
+    }
+
+    setEndWeekendDate("");
+    setScoreRows(emptyScoreRows());
+    await loadDashboard();
+    setActiveTab("weekends");
+    setIsEndingWeekend(false);
+  }
+
+  async function handleStartWeekend(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsStartingWeekend(true);
+    setError(null);
+
+    const response = await fetch("/api/admin/weekends", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(weekendForm),
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      setError(payload?.error ?? "Unable to start a new weekend.");
+      setIsStartingWeekend(false);
+      return;
+    }
+
+    setWeekendForm({ title: "", startDate: "", endDate: "" });
+    setScoreRows(emptyScoreRows());
+    await loadDashboard();
+    setActiveTab("schedule");
+    setIsStartingWeekend(false);
   }
 
   if (isLoading) {
     return (
       <div className="rounded-2xl border border-stone-200 bg-stone-50/70 p-6 text-sm text-stone-600">
-        Loading trip dashboard...
+        Loading weekend dashboard...
       </div>
     );
   }
@@ -264,7 +427,42 @@ export function DashboardTabs({ userRole }: DashboardTabsProps) {
         </p>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
+      {activeWeekend ? (
+        <div className="mb-4 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white px-5 py-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-emerald-800">
+            Active weekend
+          </p>
+          <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-stone-900">{activeWeekend.title}</h2>
+              <p className="mt-1 text-sm text-stone-600">
+                {activeWeekend.startDate}
+                {activeWeekend.endDate ? ` – ${activeWeekend.endDate}` : ""}
+              </p>
+            </div>
+            <div className="rounded-xl border border-emerald-200 bg-white px-5 py-3 text-center sm:min-w-[140px]">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">
+                Rounds left
+              </p>
+              <p className="text-3xl font-black text-emerald-800">{activeWeekend.roundsLeft}</p>
+              <p className="text-xs text-stone-500">
+                {activeWeekend.roundsCompleted} / {activeWeekend.roundsScheduled} played
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
+          <p className="text-sm font-semibold text-amber-900">No active weekend</p>
+          <p className="mt-1 text-sm text-amber-800">
+            {userRole === "admin"
+              ? "Use the Weekends tab to end the current trip or start the next one."
+              : "Ask an admin to start the next golf weekend."}
+          </p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {TABS.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
@@ -285,6 +483,16 @@ export function DashboardTabs({ userRole }: DashboardTabsProps) {
       </div>
 
       <div className="mt-6 rounded-2xl border border-stone-200 bg-white p-5 sm:p-6">
+        {activeTab === "overview" ? (
+          <DashboardOverview
+            currentUser={currentUser}
+            teams={teams}
+            scoreRows={scoreRows}
+            handicapsByPlayer={handicapsByPlayer}
+            activeWeekend={activeWeekend}
+          />
+        ) : null}
+
         {activeTab === "scoreboard" ? (
           <section>
             <h2 className="text-lg font-bold text-stone-900">Score Board</h2>
@@ -302,17 +510,22 @@ export function DashboardTabs({ userRole }: DashboardTabsProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {leaderboard.map((row, index) => (
-                    <tr key={row.player} className="rounded-xl bg-stone-50 text-stone-800">
-                      <td className="px-3 py-3 font-semibold">
-                        {index === 0 ? "Leader - " : ""}
-                        {row.player}
-                      </td>
-                      <td className="px-3 py-3">{row.front9}</td>
-                      <td className="px-3 py-3">{row.back9}</td>
-                      <td className="px-3 py-3 font-bold">{row.total}</td>
-                    </tr>
-                  ))}
+                  {leaderboard.map((row, index) => {
+                    const showLeader =
+                      row.hasScores && index === 0 && leaderboard.some((entry) => entry.hasScores);
+
+                    return (
+                      <tr key={row.player} className="rounded-xl bg-stone-50 text-stone-800">
+                        <td className="px-3 py-3 font-semibold">
+                          {showLeader ? "Leader - " : ""}
+                          {row.player}
+                        </td>
+                        <td className="px-3 py-3">{row.hasScores ? row.front9 : "—"}</td>
+                        <td className="px-3 py-3">{row.hasScores ? row.back9 : "—"}</td>
+                        <td className="px-3 py-3 font-bold">{row.hasScores ? row.total : "—"}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -383,9 +596,9 @@ export function DashboardTabs({ userRole }: DashboardTabsProps) {
 
         {activeTab === "schedule" ? (
           <section>
-            <h2 className="text-lg font-bold text-stone-900">Upcoming Schedule</h2>
+            <h2 className="text-lg font-bold text-stone-900">Weekend schedule</h2>
             <p className="mt-1 text-sm text-stone-600">
-              Trip rounds and tee times.
+              Rounds planned for this weekend. Add schedule items to track rounds left.
             </p>
 
             <div className="mt-4 space-y-3">
@@ -528,7 +741,7 @@ export function DashboardTabs({ userRole }: DashboardTabsProps) {
                           next[playerIndex] = { ...next[playerIndex], playerName: event.target.value };
                           setScorecardPlayers(next);
                         }}
-                        placeholder="e.g., Kody"
+                        placeholder="e.g., MinJungKyu"
                         className="flex-1 rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
                       />
                     </div>
@@ -587,11 +800,149 @@ export function DashboardTabs({ userRole }: DashboardTabsProps) {
           </section>
         ) : null}
 
+        {activeTab === "weekends" ? (
+          <section>
+            <h2 className="text-lg font-bold text-stone-900">Weekends</h2>
+            <p className="mt-1 text-sm text-stone-600">
+              Manage the active weekend and browse past trips. Admins can end or start weekends
+              below.
+            </p>
+
+            {activeWeekend ? (
+              <article className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-800">
+                  Current
+                </p>
+                <p className="mt-1 text-base font-bold text-stone-900">{activeWeekend.title}</p>
+                <p className="mt-1 text-sm text-stone-600">
+                  {activeWeekend.startDate}
+                  {activeWeekend.endDate ? ` – ${activeWeekend.endDate}` : ""} ·{" "}
+                  {activeWeekend.roundsLeft} round
+                  {activeWeekend.roundsLeft === 1 ? "" : "s"} left
+                </p>
+              </article>
+            ) : null}
+
+            <div className="mt-4 space-y-3">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-stone-600">
+                Past weekends
+              </h3>
+              {pastWeekends.length === 0 ? (
+                <p className="text-sm text-stone-500">No completed weekends yet.</p>
+              ) : (
+                pastWeekends.map((weekend) => (
+                  <article
+                    key={weekend.id}
+                    className="rounded-xl border border-stone-200 bg-stone-50 p-4"
+                  >
+                    <p className="text-sm font-bold text-stone-900">{weekend.title}</p>
+                    <p className="mt-1 text-sm text-stone-600">
+                      {weekend.startDate}
+                      {weekend.endDate ? ` – ${weekend.endDate}` : ""}
+                    </p>
+                    <p className="mt-1 text-xs text-stone-500">
+                      {weekend.roundsCompleted} of {weekend.roundsScheduled} rounds played
+                    </p>
+                  </article>
+                ))
+              )}
+            </div>
+
+            {userRole === "admin" && activeWeekend ? (
+              <div className="mt-6 space-y-3 rounded-xl border border-red-100 bg-red-50/50 p-4">
+                <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-red-800">
+                  End weekend
+                </h4>
+                <p className="text-sm text-stone-600">
+                  Archive &quot;{activeWeekend.title}&quot; without starting another. Scores and
+                  schedule move to Past weekends.
+                </p>
+                <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
+                  End date (optional)
+                </label>
+                <input
+                  type="date"
+                  value={endWeekendDate}
+                  onChange={(event) => setEndWeekendDate(event.target.value)}
+                  className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleEndWeekend()}
+                  disabled={isEndingWeekend}
+                  className="w-full rounded-xl border border-red-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-red-800 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {isEndingWeekend ? "Ending..." : "End weekend"}
+                </button>
+              </div>
+            ) : null}
+
+            {userRole === "admin" ? (
+              <form
+                className="mt-6 space-y-3 rounded-xl border border-stone-200 bg-white p-4"
+                onSubmit={handleStartWeekend}
+              >
+                <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-600">
+                  Start new weekend
+                </h4>
+                <p className="text-sm text-stone-500">
+                  Creates a new active weekend with default teams (Idaho vs Oregon). If one is
+                  still active, end it first or this will replace it in one step.
+                </p>
+                <input
+                  type="text"
+                  value={weekendForm.title}
+                  onChange={(event) =>
+                    setWeekendForm((previous) => ({
+                      ...previous,
+                      title: event.target.value,
+                    }))
+                  }
+                  placeholder="Weekend title (e.g. Memorial Day 2026)"
+                  className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
+                  required
+                />
+                <input
+                  type="date"
+                  value={weekendForm.startDate}
+                  onChange={(event) =>
+                    setWeekendForm((previous) => ({
+                      ...previous,
+                      startDate: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
+                  required
+                />
+                <input
+                  type="date"
+                  value={weekendForm.endDate}
+                  onChange={(event) =>
+                    setWeekendForm((previous) => ({
+                      ...previous,
+                      endDate: event.target.value,
+                    }))
+                  }
+                  placeholder="Optional end date"
+                  className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
+                />
+                <button
+                  type="submit"
+                  disabled={isStartingWeekend}
+                  className="rounded-xl bg-emerald-700 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {isStartingWeekend ? "Starting..." : "Start new weekend"}
+                </button>
+              </form>
+            ) : null}
+          </section>
+        ) : null}
+
         {activeTab === "games" ? (
           <section>
             <h2 className="text-lg font-bold text-stone-900">Games</h2>
             <p className="mt-1 text-sm text-stone-600">
-              Active and recent games for this trip.
+              Active and recent side games for this weekend.
             </p>
 
             <div className="mt-4 space-y-3">

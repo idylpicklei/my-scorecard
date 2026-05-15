@@ -14,7 +14,11 @@ import {
   sessions,
   teams,
   users,
+  weekends,
 } from "../drizzle/schema";
+
+const DEFAULT_WEEKEND_ID = "00000000-0000-4000-8000-000000000010";
+import { usernameFromName } from "../lib/auth/username";
 
 type LocalDb = {
   users?: Array<{
@@ -86,6 +90,7 @@ async function main() {
         .insert(users)
         .values({
           id: user.id,
+          username: usernameFromName(user.name),
           email: user.email,
           name: user.name,
           role: user.role === "admin" ? "admin" : "member",
@@ -128,6 +133,16 @@ async function main() {
     }
   }
 
+  await db
+    .insert(weekends)
+    .values({
+      id: DEFAULT_WEEKEND_ID,
+      title: "Imported Weekend",
+      startDate: new Date().toISOString().slice(0, 10),
+      status: "active",
+    })
+    .onConflictDoNothing();
+
   if (local.teams?.length) {
     for (const team of local.teams) {
       const id = isUuid(team.id)
@@ -135,7 +150,12 @@ async function main() {
         : crypto.randomUUID();
       await db
         .insert(teams)
-        .values({ id, name: team.name, players: team.players })
+        .values({
+          id,
+          weekendId: DEFAULT_WEEKEND_ID,
+          name: team.name,
+          players: team.players,
+        })
         .onConflictDoNothing();
     }
   }
@@ -147,6 +167,7 @@ async function main() {
         .insert(scheduleEntries)
         .values({
           id: entry.id,
+          weekendId: DEFAULT_WEEKEND_ID,
           title: entry.title,
           course: entry.course,
           date: entry.date,
@@ -164,6 +185,7 @@ async function main() {
         .insert(scorecards)
         .values({
           id: card.id,
+          weekendId: DEFAULT_WEEKEND_ID,
           course: card.course,
           date: card.date,
           players: card.players,

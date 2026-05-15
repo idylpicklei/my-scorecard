@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 type SignupState = {
+  username: string;
   name: string;
   email: string;
   password: string;
@@ -13,6 +14,7 @@ type SignupState = {
 export function SignupForm() {
   const router = useRouter();
   const [form, setForm] = useState<SignupState>({
+    username: "",
     name: "",
     email: "",
     password: "",
@@ -41,6 +43,7 @@ export function SignupForm() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        username: form.username,
         name: form.name,
         email: form.email,
         password: form.password,
@@ -76,6 +79,27 @@ export function SignupForm() {
           }
           placeholder="Your name"
           autoComplete="name"
+          className="w-full rounded-xl border border-emerald-800/20 bg-white/70 px-4 py-3 text-base text-stone-900 shadow-inner outline-none transition focus:border-emerald-700 focus:ring-4 focus:ring-emerald-400/30"
+          required
+        />
+      </div>
+
+      <div className="space-y-2">
+        <label
+          htmlFor="username"
+          className="text-sm font-semibold uppercase tracking-[0.2em] text-stone-700"
+        >
+          Username
+        </label>
+        <input
+          id="username"
+          type="text"
+          value={form.username}
+          onChange={(event) =>
+            setForm((previous) => ({ ...previous, username: event.target.value }))
+          }
+          placeholder="MinJungKyu"
+          autoComplete="username"
           className="w-full rounded-xl border border-emerald-800/20 bg-white/70 px-4 py-3 text-base text-stone-900 shadow-inner outline-none transition focus:border-emerald-700 focus:ring-4 focus:ring-emerald-400/30"
           required
         />
@@ -165,5 +189,3 @@ export function SignupForm() {
     </form>
   );
 }
-
-

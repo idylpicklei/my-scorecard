@@ -2,12 +2,14 @@ CREATE TYPE "user_role" AS ENUM ('admin', 'member');
 
 CREATE TABLE "users" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  "username" text NOT NULL,
   "email" text NOT NULL,
   "name" text NOT NULL,
   "role" "user_role" DEFAULT 'member' NOT NULL,
   "password_hash" text NOT NULL,
   "created_at" timestamptz DEFAULT now() NOT NULL,
-  CONSTRAINT "users_email_unique" UNIQUE("email")
+  CONSTRAINT "users_email_unique" UNIQUE("email"),
+  CONSTRAINT "users_username_unique" UNIQUE("username")
 );
 
 CREATE TABLE "sessions" (

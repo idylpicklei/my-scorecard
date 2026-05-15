@@ -5,14 +5,14 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 type LoginState = {
-  email: string;
+  username: string;
   password: string;
 };
 
 export function LoginForm() {
   const router = useRouter();
   const [form, setForm] = useState<LoginState>({
-    email: "",
+    username: "",
     password: "",
   });
   const [error, setError] = useState<string | null>(null);
@@ -48,23 +48,23 @@ export function LoginForm() {
     <form className="space-y-6" onSubmit={onSubmit}>
       <div className="space-y-2">
         <label
-          htmlFor="email"
+          htmlFor="username"
           className="text-sm font-semibold uppercase tracking-[0.2em] text-stone-700"
         >
-          Email
+          Username
         </label>
         <input
-          id="email"
-          type="email"
-          value={form.email}
+          id="username"
+          type="text"
+          value={form.username}
           onChange={(event) =>
             setForm((previous) => ({
               ...previous,
-              email: event.target.value,
+              username: event.target.value,
             }))
           }
-          placeholder="friends@myscorecard.local"
-          autoComplete="email"
+          placeholder="MinJungKyu"
+          autoComplete="username"
           className="w-full rounded-xl border border-emerald-800/20 bg-white/70 px-4 py-3 text-base text-stone-900 shadow-inner outline-none transition focus:border-emerald-700 focus:ring-4 focus:ring-emerald-400/30"
           required
         />

@@ -3,19 +3,32 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  real,
   text,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
 
 export const userRoleEnum = pgEnum("user_role", ["admin", "member"]);
+export const weekendStatusEnum = pgEnum("weekend_status", ["active", "completed"]);
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
+  username: text("username").notNull().unique(),
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
+  handicap: real("handicap").notNull().default(0),
   role: userRoleEnum("role").notNull().default("member"),
   passwordHash: text("password_hash").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const weekends = pgTable("weekends", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  title: text("title").notNull(),
+  startDate: date("start_date", { mode: "string" }).notNull(),
+  endDate: date("end_date", { mode: "string" }),
+  status: weekendStatusEnum("status").notNull().default("active"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -41,12 +54,18 @@ export const passwordResets = pgTable("password_resets", {
 
 export const teams = pgTable("teams", {
   id: uuid("id").primaryKey(),
+  weekendId: uuid("weekend_id")
+    .notNull()
+    .references(() => weekends.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   players: jsonb("players").$type<string[]>().notNull().default([]),
 });
 
 export const scheduleEntries = pgTable("schedule_entries", {
   id: uuid("id").primaryKey().defaultRandom(),
+  weekendId: uuid("weekend_id")
+    .notNull()
+    .references(() => weekends.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   course: text("course").notNull(),
   date: date("date", { mode: "string" }).notNull(),
@@ -56,6 +75,12 @@ export const scheduleEntries = pgTable("schedule_entries", {
 
 export const scorecards = pgTable("scorecards", {
   id: uuid("id").primaryKey().defaultRandom(),
+  weekendId: uuid("weekend_id")
+    .notNull()
+    .references(() => weekends.id, { onDelete: "cascade" }),
+  scheduleEntryId: uuid("schedule_entry_id").references(() => scheduleEntries.id, {
+    onDelete: "set null",
+  }),
   course: text("course").notNull(),
   date: date("date", { mode: "string" }).notNull(),
   players: jsonb("players")

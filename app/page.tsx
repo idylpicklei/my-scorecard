@@ -30,14 +30,22 @@ export default async function Home() {
               Weekend golf dashboard
             </h1>
             <p className="mt-3 text-base leading-7 text-stone-600">
-              Welcome back, {user.name}. Use the tabs below to track scores, upload scorecards, and manage side games for your trip.
+              Welcome back, {user.name}. Track this weekend&apos;s rounds, upload scorecards, and
+              browse past weekends from the tabs below.
             </p>
           </div>
           <LogoutButton />
         </div>
 
         <div className="mt-8">
-          <DashboardTabs userRole={user.role} />
+          <DashboardTabs
+            userRole={user.role}
+            currentUser={{
+              name: user.name,
+              username: user.username,
+              handicap: user.handicap,
+            }}
+          />
         </div>
       </section>
     </main>

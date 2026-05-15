@@ -3,12 +3,15 @@ import {
   createSessionForUser,
   createUser,
   findUserByEmail,
+  findUserByUsername,
   SESSION_COOKIE_NAME,
 } from "@/lib/auth/local-db";
+import { isValidUsername, normalizeUsername } from "@/lib/auth/username";
 
 export const runtime = "nodejs";
 
 type SignupPayload = {
+  username?: string;
   name?: string;
   email?: string;
   password?: string;
@@ -17,13 +20,24 @@ type SignupPayload = {
 export async function POST(request: NextRequest) {
   const payload = (await request.json().catch(() => null)) as SignupPayload | null;
 
+  const username = payload?.username?.trim();
   const name = payload?.name?.trim();
   const email = payload?.email?.trim().toLowerCase();
   const password = payload?.password;
 
-  if (!name || !email || !password) {
+  if (!username || !name || !email || !password) {
     return NextResponse.json(
-      { error: "Name, email, and password are required." },
+      { error: "Username, name, email, and password are required." },
+      { status: 400 },
+    );
+  }
+
+  if (!isValidUsername(username)) {
+    return NextResponse.json(
+      {
+        error:
+          "Username must be 3–32 characters and use only letters, numbers, or underscores.",
+      },
       { status: 400 },
     );
   }
@@ -35,6 +49,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (await findUserByUsername(normalizeUsername(username))) {
+    return NextResponse.json(
+      { error: "That username is already taken." },
+      { status: 409 },
+    );
+  }
+
   if (await findUserByEmail(email)) {
     return NextResponse.json(
       { error: "An account with this email already exists." },
@@ -42,7 +63,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const user = await createUser({ email, name, password });
+  const user = await createUser({ username, email, name, password });
   if (!user) {
     return NextResponse.json(
       { error: "Unable to create account. Please try again." },

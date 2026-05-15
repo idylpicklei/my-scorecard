@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 
 export function ForgotPasswordForm() {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [resetUrl, setResetUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +20,7 @@ export function ForgotPasswordForm() {
     const response = await fetch("/api/auth/forgot-password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ username }),
     });
 
     const payload = (await response.json().catch(() => null)) as
@@ -44,18 +44,18 @@ export function ForgotPasswordForm() {
     <form className="space-y-6" onSubmit={onSubmit}>
       <div className="space-y-2">
         <label
-          htmlFor="email"
+          htmlFor="username"
           className="text-sm font-semibold uppercase tracking-[0.2em] text-stone-700"
         >
-          Email
+          Username
         </label>
         <input
-          id="email"
-          type="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          placeholder="friends@myscorecard.local"
-          autoComplete="email"
+          id="username"
+          type="text"
+          value={username}
+          onChange={(event) => setUsername(event.target.value)}
+          placeholder="MinJungKyu"
+          autoComplete="username"
           className="w-full rounded-xl border border-emerald-800/20 bg-white/70 px-4 py-3 text-base text-stone-900 shadow-inner outline-none transition focus:border-emerald-700 focus:ring-4 focus:ring-emerald-400/30"
           required
         />

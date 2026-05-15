@@ -13,7 +13,10 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:migrate-local": "tsx scripts/migrate-local-json.ts",
-    "db:seed-trip-users": "tsx scripts/seed-trip-users.ts"
+    "db:seed-trip-users": "tsx scripts/seed-trip-users.ts",
+    "db:add-usernames": "tsx scripts/apply-username-migration.ts",
+    "db:add-handicaps": "tsx scripts/apply-handicap-migration.ts",
+    "db:add-weekends": "tsx scripts/apply-weekends-migration.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",

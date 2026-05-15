@@ -4,22 +4,23 @@ import { createPasswordResetToken } from "@/lib/auth/local-db";
 export const runtime = "nodejs";
 
 type ForgotPasswordPayload = {
+  username?: string;
   email?: string;
 };
 
 export async function POST(request: NextRequest) {
   const payload = (await request.json().catch(() => null)) as ForgotPasswordPayload | null;
-  const email = payload?.email?.trim().toLowerCase();
+  const login = (payload?.username ?? payload?.email)?.trim();
 
-  if (!email) {
-    return NextResponse.json({ error: "Email is required." }, { status: 400 });
+  if (!login) {
+    return NextResponse.json({ error: "Username is required." }, { status: 400 });
   }
 
-  const reset = await createPasswordResetToken(email);
+  const reset = await createPasswordResetToken(login);
   const origin = request.nextUrl.origin;
   const body: { message: string; resetUrl?: string } = {
     message:
-      "If an account exists for that email, password reset instructions have been generated.",
+      "If an account exists for that username, password reset instructions have been generated.",
   };
 
   if (reset && process.env.NODE_ENV !== "production") {
