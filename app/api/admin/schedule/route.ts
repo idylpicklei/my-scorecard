@@ -12,6 +12,7 @@ type SchedulePayload = {
   course?: string;
   date?: string;
   notes?: string;
+  kind?: string;
 };
 
 export async function POST(request: NextRequest) {
@@ -29,22 +30,33 @@ export async function POST(request: NextRequest) {
   const payload = (await request.json().catch(() => null)) as SchedulePayload | null;
 
   const title = payload?.title?.trim();
-  const course = payload?.course?.trim();
+  const courseRaw = payload?.course?.trim();
   const date = payload?.date?.trim();
   const notes = payload?.notes?.trim();
+  const kind = payload?.kind === "dinner" ? "dinner" : "round";
 
-  if (!title || !course || !date) {
+  if (!title || !date) {
     return NextResponse.json(
-      { error: "Title, course, and date are required." },
+      { error: "Title and date are required." },
       { status: 400 },
     );
   }
+
+  if (kind === "round" && !courseRaw) {
+    return NextResponse.json(
+      { error: "Course name is required for golf rounds." },
+      { status: 400 },
+    );
+  }
+
+  const course = kind === "dinner" ? courseRaw || "—" : courseRaw!;
 
   const created = await addScheduleEntry({
     title,
     course,
     date,
     notes,
+    kind,
   });
 
   return NextResponse.json({ entry: created });

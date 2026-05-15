@@ -11,6 +11,7 @@ import {
 
 export const userRoleEnum = pgEnum("user_role", ["admin", "member"]);
 export const weekendStatusEnum = pgEnum("weekend_status", ["active", "completed"]);
+export const scheduleEntryKindEnum = pgEnum("schedule_entry_kind", ["round", "dinner"]);
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -66,6 +67,7 @@ export const scheduleEntries = pgTable("schedule_entries", {
   weekendId: uuid("weekend_id")
     .notNull()
     .references(() => weekends.id, { onDelete: "cascade" }),
+  kind: scheduleEntryKindEnum("kind").notNull().default("round"),
   title: text("title").notNull(),
   course: text("course").notNull(),
   date: date("date", { mode: "string" }).notNull(),

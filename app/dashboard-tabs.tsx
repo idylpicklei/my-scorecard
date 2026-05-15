@@ -43,6 +43,7 @@ type Team = {
 
 type ScheduleItem = {
   id: string;
+  kind: "round" | "dinner";
   title: string;
   course: string;
   date: string;
@@ -162,6 +163,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
     date: "",
   });
   const [scheduleForm, setScheduleForm] = useState({
+    kind: "round" as "round" | "dinner",
     title: "",
     course: "",
     date: "",
@@ -303,9 +305,16 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
     const payload = (await response.json()) as { entry: ScheduleItem };
     setSchedule((previous) => {
       const merged = [...previous, payload.entry];
-      return merged.sort((a, b) => a.date.localeCompare(b.date));
+      return merged.sort((a, b) => {
+        const byDate = a.date.localeCompare(b.date);
+        if (byDate !== 0) {
+          return byDate;
+        }
+        return a.createdAt.localeCompare(b.createdAt);
+      });
     });
     setScheduleForm({
+      kind: "round",
       title: "",
       course: "",
       date: "",
@@ -598,14 +607,39 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
           <section>
             <h2 className="text-lg font-bold text-stone-900">Weekend schedule</h2>
             <p className="mt-1 text-sm text-stone-600">
-              Rounds planned for this weekend. Add schedule items to track rounds left.
+              Add golf rounds and dinner plans. Only golf rounds count toward &quot;rounds left&quot;
+              on the dashboard.
             </p>
 
             <div className="mt-4 space-y-3">
               {schedule.map((item) => (
-                <article key={item.id} className="rounded-xl border border-stone-200 bg-stone-50 p-4">
-                  <p className="text-sm font-bold text-stone-900">{item.title}</p>
-                  <p className="mt-1 text-sm text-stone-700">{item.course}</p>
+                <article
+                  key={item.id}
+                  className={`rounded-xl border p-4 ${
+                    item.kind === "dinner"
+                      ? "border-amber-200 bg-amber-50/80"
+                      : "border-stone-200 bg-stone-50"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${
+                        item.kind === "dinner"
+                          ? "bg-amber-200 text-amber-900"
+                          : "bg-emerald-200 text-emerald-900"
+                      }`}
+                    >
+                      {item.kind === "dinner" ? "Dinner" : "Golf round"}
+                    </span>
+                    <p className="text-sm font-bold text-stone-900">{item.title}</p>
+                  </div>
+                  <p className="mt-1 text-sm text-stone-700">
+                    {item.kind === "dinner"
+                      ? item.course === "—"
+                        ? "Venue TBD"
+                        : item.course
+                      : item.course}
+                  </p>
                   <p className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-800">
                     {item.date}
                   </p>
@@ -619,8 +653,26 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
             {userRole === "admin" ? (
               <form className="mt-6 space-y-3 rounded-xl border border-stone-200 bg-white p-4" onSubmit={handleScheduleCreate}>
                 <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-600">
-                  Admin: Add Schedule Item
+                  Admin: Add to schedule
                 </h4>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
+                    Type
+                  </label>
+                  <select
+                    value={scheduleForm.kind}
+                    onChange={(event) =>
+                      setScheduleForm((previous) => ({
+                        ...previous,
+                        kind: event.target.value as "round" | "dinner",
+                      }))
+                    }
+                    className="mt-2 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
+                  >
+                    <option value="round">Golf round</option>
+                    <option value="dinner">Dinner plan</option>
+                  </select>
+                </div>
                 <input
                   type="text"
                   value={scheduleForm.title}
@@ -630,7 +682,11 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                       title: event.target.value,
                     }))
                   }
-                  placeholder="Round title"
+                  placeholder={
+                    scheduleForm.kind === "dinner"
+                      ? "e.g. Saturday team dinner"
+                      : "Round title"
+                  }
                   className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
                   required
                 />
@@ -643,9 +699,13 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                       course: event.target.value,
                     }))
                   }
-                  placeholder="Course name"
+                  placeholder={
+                    scheduleForm.kind === "dinner"
+                      ? "Restaurant or venue (optional)"
+                      : "Course name"
+                  }
                   className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
-                  required
+                  required={scheduleForm.kind === "round"}
                 />
                 <input
                   type="date"
@@ -667,7 +727,11 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                       notes: event.target.value,
                     }))
                   }
-                  placeholder="Optional notes"
+                  placeholder={
+                    scheduleForm.kind === "dinner"
+                      ? "Time, reservations, menu notes…"
+                      : "Optional notes (tee time, format, etc.)"
+                  }
                   className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
                   rows={3}
                 />
@@ -676,7 +740,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                   disabled={isSavingSchedule}
                   className="rounded-xl bg-emerald-700 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {isSavingSchedule ? "Adding..." : "Add to Schedule"}
+                  {isSavingSchedule ? "Adding..." : "Add to schedule"}
                 </button>
               </form>
             ) : null}

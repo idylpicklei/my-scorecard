@@ -69,6 +69,7 @@ type ScheduleSeedEntry = {
   course: string;
   date: string;
   notes?: string;
+  kind?: "round" | "dinner";
 };
 
 const DEFAULT_SCHEDULE: ScheduleSeedEntry[] = [];
@@ -272,6 +273,8 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
       DEFAULT_SCHEDULE.map((entry) => ({
 
         weekendId,
+
+        kind: entry.kind ?? "round",
 
         title: entry.title,
 

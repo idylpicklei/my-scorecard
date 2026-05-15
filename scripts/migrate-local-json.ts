@@ -168,6 +168,7 @@ async function main() {
         .values({
           id: entry.id,
           weekendId: DEFAULT_WEEKEND_ID,
+          kind: "round",
           title: entry.title,
           course: entry.course,
           date: entry.date,

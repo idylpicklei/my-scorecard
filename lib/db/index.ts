@@ -47,8 +47,11 @@ export type DashboardTeam = {
   players: string[];
 };
 
+export type ScheduleKind = "round" | "dinner";
+
 export type ScheduleEntry = {
   id: string;
+  kind: ScheduleKind;
   title: string;
   course: string;
   date: string;
@@ -144,6 +147,7 @@ export async function getTripPlayerHandicaps(): Promise<Record<string, number>> 
 function mapSchedule(row: typeof scheduleEntries.$inferSelect): ScheduleEntry {
   return {
     id: row.id,
+    kind: row.kind,
     title: row.title,
     course: row.course,
     date: row.date,
@@ -332,15 +336,18 @@ export async function addScheduleEntry(entry: {
   course: string;
   date: string;
   notes?: string;
+  kind?: ScheduleKind;
 }): Promise<ScheduleEntry> {
   await ensureDatabaseReady();
   const weekendId = await requireActiveWeekendId();
   const db = getDb();
+  const kind = entry.kind === "dinner" ? "dinner" : "round";
 
   const [row] = await db
     .insert(scheduleEntries)
     .values({
       weekendId,
+      kind,
       title: entry.title,
       course: entry.course,
       date: entry.date,

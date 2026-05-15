@@ -18,6 +18,7 @@ type DashboardTeam = {
 
 type ScheduleEntry = {
   id: string;
+  kind: "round" | "dinner";
   title: string;
   course: string;
   date: string;
@@ -95,7 +96,9 @@ async function countRoundsForWeekend(weekendId: string): Promise<{
   const [scheduleCount] = await db
     .select({ value: sql<number>`count(*)::int` })
     .from(scheduleEntries)
-    .where(eq(scheduleEntries.weekendId, weekendId));
+    .where(
+      and(eq(scheduleEntries.weekendId, weekendId), eq(scheduleEntries.kind, "round")),
+    );
 
   const [completedCount] = await db
     .select({ value: sql<number>`count(*)::int` })
@@ -179,7 +182,7 @@ export async function getWeekendDashboardData(weekendId: string): Promise<{
     .select()
     .from(scheduleEntries)
     .where(eq(scheduleEntries.weekendId, weekendId))
-    .orderBy(asc(scheduleEntries.date));
+    .orderBy(asc(scheduleEntries.date), asc(scheduleEntries.createdAt));
 
   const scorecardRows = await db
     .select()
@@ -195,6 +198,7 @@ export async function getWeekendDashboardData(weekendId: string): Promise<{
     })),
     schedule: scheduleRows.map((entry) => ({
       id: entry.id,
+      kind: entry.kind,
       title: entry.title,
       course: entry.course,
       date: entry.date,
@@ -289,7 +293,13 @@ export async function findScheduleEntryIdForScorecard(
   const entries = await db
     .select()
     .from(scheduleEntries)
-    .where(and(eq(scheduleEntries.weekendId, weekendId), eq(scheduleEntries.date, date)));
+    .where(
+      and(
+        eq(scheduleEntries.weekendId, weekendId),
+        eq(scheduleEntries.date, date),
+        eq(scheduleEntries.kind, "round"),
+      ),
+    );
 
   if (entries.length === 0) {
     return null;
