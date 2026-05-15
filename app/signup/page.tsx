@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { SignupForm } from "@/app/signup/signup-form";
 import { getUserBySessionToken, SESSION_COOKIE_NAME } from "@/lib/auth/local-db";
-import { LoginForm } from "@/app/login/login-form";
 
-export default async function LoginPage() {
+export default async function SignupPage() {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
@@ -25,25 +25,20 @@ export default async function LoginPage() {
           My Scorecard
         </p>
         <h1 className="mt-3 text-3xl font-black leading-tight text-stone-900 sm:text-4xl">
-          Welcome back,
-          <br />
-          tee time is waiting.
+          Join the trip
         </h1>
         <p className="mt-3 text-sm text-stone-600">
-          Sign in to track rounds, compare weekend scores, and keep your golf trip stats in one place.
-        </p>
-        <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">
-          Admin login can edit schedule and team assignments.
+          Create an account to track rounds, upload scorecards, and follow the weekend leaderboard.
         </p>
 
         <div className="mt-8">
-          <LoginForm />
+          <SignupForm />
         </div>
 
         <p className="mt-6 text-center text-sm text-stone-600">
-          Don&apos;t have an account?{" "}
-          <Link href="/signup" className="font-semibold text-emerald-800 hover:text-emerald-900">
-            Sign up
+          Already have an account?{" "}
+          <Link href="/login" className="font-semibold text-emerald-800 hover:text-emerald-900">
+            Sign in
           </Link>
         </p>
       </section>

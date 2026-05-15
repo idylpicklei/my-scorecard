@@ -15,17 +15,26 @@
       "role": "admin",
       "passwordHash": "18b77a3a3dd9c0173755ef18ba5bb541:bc81ea7b66add3f81bf9bfd9088872ca550cf1909588386b45a9e3f416fcc020e74a99b124258218525d3290648385081a935588377271cf1dc8f95144e422f4",
       "createdAt": "2026-05-07T21:41:08.100Z"
+    },
+    {
+      "id": "f8dd7506-562d-4115-b814-a179a03f04da",
+      "email": "dylan@gmail.com",
+      "name": "Dylan",
+      "role": "member",
+      "passwordHash": "eadd5498dbc700d996a8fc1db7756559:adb5e6562a06ab3758a12a29e4d6de1ee98ab752929b1d2b605cd598ee12f79165bd2744062bc82b755338313ab524a7658f213c02e44255e26416b66968d246",
+      "createdAt": "2026-05-15T16:54:01.586Z"
     }
   ],
   "sessions": [
     {
-      "id": "499de023-40cd-44ef-af15-575a44625c9b",
-      "tokenHash": "cc46c0e4bfbd90a16a0adfc68576033d306499b5f25f0ec09ea95070fd98efd8",
-      "userId": "25d36b7a-891b-4ad4-86a5-aef4f7c92059",
-      "expiresAt": "2026-05-14T21:42:10.603Z",
-      "createdAt": "2026-05-07T21:42:10.603Z"
+      "id": "b00498ef-2398-4bff-af79-ad5b9a408355",
+      "tokenHash": "4be08cc2f26da929e68001d1a4ba3ae520325900faccc09383ca7b5e79ed10a6",
+      "userId": "f8dd7506-562d-4115-b814-a179a03f04da",
+      "expiresAt": "2026-05-22T16:54:01.592Z",
+      "createdAt": "2026-05-15T16:54:01.592Z"
     }
   ],
+  "passwordResets": [],
   "teams": [
     {
       "id": "team-idaho-001",
@@ -61,5 +70,6 @@
       "notes": "Idaho vs Oregon front/back Nassau",
       "createdAt": "2026-05-07T21:41:07.883Z"
     }
-  ]
+  ],
+  "scorecards": []
 }

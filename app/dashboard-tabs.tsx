@@ -24,6 +24,7 @@ type ScoreRow = {
   back9: number;
 };
 
+
 type Team = {
   id: string;
   name: string;

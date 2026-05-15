@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
@@ -91,6 +92,14 @@ export function LoginForm() {
           className="w-full rounded-xl border border-emerald-800/20 bg-white/70 px-4 py-3 text-base text-stone-900 shadow-inner outline-none transition focus:border-emerald-700 focus:ring-4 focus:ring-emerald-400/30"
           required
         />
+        <p className="text-right">
+          <Link
+            href="/forgot-password"
+            className="text-sm font-medium text-emerald-800 hover:text-emerald-900"
+          >
+            Forgot password?
+          </Link>
+        </p>
       </div>
 
       {error ? (
