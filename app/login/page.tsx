@@ -22,20 +22,11 @@ export default async function LoginPage() {
 
       <section className="relative z-10 w-full max-w-md rounded-3xl border border-white/70 bg-white/80 p-8 shadow-2xl backdrop-blur-md sm:p-10">
         <p className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-700">
-          My Scorecard
+          2026 Spring Breakfast Balls Tournament
         </p>
         <h1 className="mt-3 text-3xl font-black leading-tight text-stone-900 sm:text-4xl">
-          Welcome back,
-          <br />
-          tee time is waiting.
+          Breakfast Balls Tournament
         </h1>
-        <p className="mt-3 text-sm text-stone-600">
-          Sign in to track rounds, compare weekend scores, and keep your golf trip stats in one place.
-        </p>
-        <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">
-          Admin login can edit schedule and team assignments.
-        </p>
-
         <div className="mt-8">
           <LoginForm />
         </div>

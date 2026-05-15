@@ -24,15 +24,11 @@ export default async function Home() {
         <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-700">
-              My Scorecard
+              2026 Spring Breakfast Balls Tournament
             </p>
             <h1 className="mt-3 text-3xl font-black text-stone-900 sm:text-4xl">
-              Weekend golf dashboard
+              The Breakfast Balls Tournament
             </h1>
-            <p className="mt-3 text-base leading-7 text-stone-600">
-              Welcome back, {user.name}. Track this weekend&apos;s rounds, upload scorecards, and
-              browse past weekends from the tabs below.
-            </p>
           </div>
           <LogoutButton />
         </div>
