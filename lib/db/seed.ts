@@ -64,7 +64,14 @@ const DEFAULT_TEAMS = [
 
 
 
-const DEFAULT_SCHEDULE = [{}];
+type ScheduleSeedEntry = {
+  title: string;
+  course: string;
+  date: string;
+  notes?: string;
+};
+
+const DEFAULT_SCHEDULE: ScheduleSeedEntry[] = [];
 
 
 
@@ -258,7 +265,7 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
 
 
 
-  if (scheduleCount === 0) {
+  if (scheduleCount === 0 && DEFAULT_SCHEDULE.length > 0) {
 
     await db.insert(scheduleEntries).values(
 
