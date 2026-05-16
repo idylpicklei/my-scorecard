@@ -21,6 +21,7 @@ type ScheduleEntry = {
   kind: "round" | "dinner";
   title: string;
   course: string;
+  courseId?: string;
   date: string;
   notes?: string;
   createdAt: string;
@@ -29,6 +30,7 @@ type ScheduleEntry = {
 type Scorecard = {
   id: string;
   course: string;
+  courseId?: string;
   date: string;
   players: { playerName: string; holes: number[] }[];
   createdAt: string;
@@ -201,6 +203,7 @@ export async function getWeekendDashboardData(weekendId: string): Promise<{
       kind: entry.kind,
       title: entry.title,
       course: entry.course,
+      courseId: entry.courseId ?? undefined,
       date: entry.date,
       notes: entry.notes ?? undefined,
       createdAt: entry.createdAt.toISOString(),
@@ -208,6 +211,7 @@ export async function getWeekendDashboardData(weekendId: string): Promise<{
     scorecards: scorecardRows.map((entry) => ({
       id: entry.id,
       course: entry.course,
+      courseId: entry.courseId ?? undefined,
       date: entry.date,
       players: entry.players,
       createdAt: entry.createdAt.toISOString(),

@@ -62,6 +62,14 @@ export const teams = pgTable("teams", {
   players: jsonb("players").$type<string[]>().notNull().default([]),
 });
 
+export const golfCourses = pgTable("golf_courses", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull().unique(),
+  holePars: jsonb("hole_pars").$type<number[]>().notNull(),
+  strokeIndexes: jsonb("stroke_indexes").$type<number[]>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const scheduleEntries = pgTable("schedule_entries", {
   id: uuid("id").primaryKey().defaultRandom(),
   weekendId: uuid("weekend_id")
@@ -70,6 +78,7 @@ export const scheduleEntries = pgTable("schedule_entries", {
   kind: scheduleEntryKindEnum("kind").notNull().default("round"),
   title: text("title").notNull(),
   course: text("course").notNull(),
+  courseId: uuid("course_id").references(() => golfCourses.id, { onDelete: "set null" }),
   date: date("date", { mode: "string" }).notNull(),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -83,6 +92,7 @@ export const scorecards = pgTable("scorecards", {
   scheduleEntryId: uuid("schedule_entry_id").references(() => scheduleEntries.id, {
     onDelete: "set null",
   }),
+  courseId: uuid("course_id").references(() => golfCourses.id, { onDelete: "set null" }),
   course: text("course").notNull(),
   date: date("date", { mode: "string" }).notNull(),
   players: jsonb("players")

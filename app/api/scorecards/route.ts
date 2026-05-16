@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   getAuthUserFromRequestToken,
+  getGolfCourseById,
   getScorecards,
   saveScorecard,
   SESSION_COOKIE_NAME,
@@ -11,6 +12,7 @@ export const runtime = "nodejs";
 
 type ScorecardPayload = {
   course?: string;
+  courseId?: string;
   date?: string;
   players?: Array<{
     playerName?: string;
@@ -39,11 +41,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
   }
 
+  if (user.role !== "admin") {
+    return NextResponse.json({ error: "Only admins can upload scorecards." }, { status: 403 });
+  }
+
   const payload = (await request.json().catch(() => null)) as ScorecardPayload | null;
 
-  const course = payload?.course?.trim();
+  const courseId = payload?.courseId?.trim();
   const date = payload?.date?.trim();
   const players = payload?.players;
+  let course = payload?.course?.trim() ?? "";
+
+  if (courseId) {
+    const template = await getGolfCourseById(courseId);
+    if (!template) {
+      return NextResponse.json({ error: "Selected course was not found." }, { status: 400 });
+    }
+    course = template.name;
+  }
 
   if (!course || !date || !players || players.length === 0) {
     return NextResponse.json(
@@ -53,13 +68,20 @@ export async function POST(request: NextRequest) {
   }
 
   const normalizedPlayers: PlayerScores[] = players
-    .map((player) => ({
-      playerName: player.playerName?.trim() ?? "",
-      holes: Array.isArray(player.holes)
-        ? player.holes.map((score) => Number(score) || 0).filter((score) => score > 0)
-        : [],
-    }))
-    .filter((player) => player.playerName.length > 0 && player.holes.length === 18);
+    .map((player) => {
+      const raw = Array.isArray(player.holes) ? player.holes : [];
+      const holes = Array.from({ length: 18 }, (_, index) => {
+        const score = Number(raw[index]);
+        return Number.isFinite(score) && score > 0 ? score : 0;
+      });
+      return {
+        playerName: player.playerName?.trim() ?? "",
+        holes,
+      };
+    })
+    .filter(
+      (player) => player.playerName.length > 0 && player.holes.every((score) => score > 0),
+    );
 
   if (normalizedPlayers.length === 0) {
     return NextResponse.json(
@@ -70,6 +92,7 @@ export async function POST(request: NextRequest) {
 
   const created = await saveScorecard({
     course,
+    courseId: courseId || undefined,
     date,
     players: normalizedPlayers,
   });

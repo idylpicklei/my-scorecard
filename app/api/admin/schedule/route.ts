@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   addScheduleEntry,
   getAuthUserFromRequestToken,
+  getGolfCourseById,
   SESSION_COOKIE_NAME,
 } from "@/lib/auth/local-db";
 
@@ -10,6 +11,7 @@ export const runtime = "nodejs";
 type SchedulePayload = {
   title?: string;
   course?: string;
+  courseId?: string;
   date?: string;
   notes?: string;
   kind?: string;
@@ -42,18 +44,30 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (kind === "round" && !courseRaw) {
-    return NextResponse.json(
-      { error: "Course name is required for golf rounds." },
-      { status: 400 },
-    );
-  }
+  const courseId = payload?.courseId?.trim() || undefined;
+  let course = kind === "dinner" ? courseRaw || "—" : courseRaw ?? "";
 
-  const course = kind === "dinner" ? courseRaw || "—" : courseRaw!;
+  if (kind === "round") {
+    if (courseId) {
+      const template = await getGolfCourseById(courseId);
+      if (!template) {
+        return NextResponse.json({ error: "Selected course was not found." }, { status: 400 });
+      }
+      course = template.name;
+    }
+
+    if (!course) {
+      return NextResponse.json(
+        { error: "Select a course with a saved scorecard for golf rounds." },
+        { status: 400 },
+      );
+    }
+  }
 
   const created = await addScheduleEntry({
     title,
     course,
+    courseId: kind === "round" ? courseId : undefined,
     date,
     notes,
     kind,

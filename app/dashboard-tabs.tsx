@@ -1,7 +1,11 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { CourseSetupForm } from "@/app/course-setup-form";
 import { DashboardOverview } from "@/app/dashboard-overview";
+import { ScorecardEntry } from "@/app/scorecard-entry";
+import { ScorecardsPanel, type SavedScorecard } from "@/app/scorecards-panel";
+import type { GolfCourseLayout } from "@/lib/golf-course";
 import { TRIP_PLAYERS } from "@/lib/trip-roster";
 
 type DashboardTab =
@@ -21,10 +25,10 @@ type TabConfig = {
 };
 
 const TABS: TabConfig[] = [
-  { id: "overview", label: "Overview", shortLabel: "Home" },
+  { id: "schedule", label: "Schedule", shortLabel: "Schedule" },
+  { id: "overview", label: "Overview", shortLabel: "Overview" },
   { id: "scoreboard", label: "Score Board", shortLabel: "Scores" },
   { id: "upload", label: "Upload Scorecard", shortLabel: "Upload" },
-  { id: "schedule", label: "Schedule", shortLabel: "Schedule" },
   { id: "games", label: "Games", shortLabel: "Games" },
   { id: "weekends", label: "Weekends", shortLabel: "Trips" },
 ];
@@ -47,6 +51,7 @@ type ScheduleItem = {
   kind: "round" | "dinner";
   title: string;
   course: string;
+  courseId?: string;
   date: string;
   notes?: string;
   createdAt: string;
@@ -55,14 +60,6 @@ type ScheduleItem = {
 type ScorecardPlayer = {
   playerName: string;
   holes: number[];
-};
-
-type SavedScorecard = {
-  id: string;
-  course: string;
-  date: string;
-  players: ScorecardPlayer[];
-  createdAt: string;
 };
 
 function emptyScoreRows(): ScoreRow[] {
@@ -136,6 +133,8 @@ type DashboardResponse = {
   user: { name: string; username: string; handicap: number };
   teams: Team[];
   schedule: ScheduleItem[];
+  scorecards: SavedScorecard[];
+  courses: GolfCourseLayout[];
   handicapsByPlayer: Record<string, number>;
   activeWeekend: WeekendSummary | null;
   pastWeekends: WeekendSummary[];
@@ -147,7 +146,7 @@ type DashboardTabsProps = {
 };
 
 export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
-  const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
+  const [activeTab, setActiveTab] = useState<DashboardTab>("schedule");
   const [handicapsByPlayer, setHandicapsByPlayer] = useState<Record<string, number>>({});
   const [teams, setTeamsState] = useState<Team[]>([]);
   const [teamDraft, setTeamDraft] = useState<Team[]>([]);
@@ -157,15 +156,20 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
   const [isSavingTeams, setIsSavingTeams] = useState(false);
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
   const [isSavingScorecard, setIsSavingScorecard] = useState(false);
+  const [savedScorecards, setSavedScorecards] = useState<SavedScorecard[]>([]);
   const [scoreRows, setScoreRows] = useState<ScoreRow[]>(emptyScoreRows);
   const [scoreCardPlayers, setScorecardPlayers] = useState(defaultScorecardPlayers);
+  const [golfCourses, setGolfCourses] = useState<GolfCourseLayout[]>([]);
+  const [showCourseSetup, setShowCourseSetup] = useState(false);
   const [scorecardForm, setScorecardForm] = useState({
+    courseId: "",
     course: "",
     date: "",
   });
   const [scheduleForm, setScheduleForm] = useState({
     kind: "round" as "round" | "dinner",
     title: "",
+    courseId: "",
     course: "",
     date: "",
     notes: "",
@@ -196,19 +200,18 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
     setTeamsState(payload.teams);
     setTeamDraft(payload.teams);
     setSchedule(payload.schedule);
+    setGolfCourses(payload.courses ?? []);
     setHandicapsByPlayer(payload.handicapsByPlayer);
     setActiveWeekend(payload.activeWeekend);
     setPastWeekends(payload.pastWeekends ?? []);
 
-    const scorecardsResponse = await fetch("/api/scorecards", { cache: "no-store" });
-    if (scorecardsResponse.ok) {
-      const scorecardsPayload = (await scorecardsResponse.json()) as {
-        scorecards: SavedScorecard[];
-      };
-      const latest = scorecardsPayload.scorecards[0];
-      if (latest) {
-        setScoreRows(scorecardToRows(latest));
-      }
+    const scorecards = payload.scorecards ?? [];
+    setSavedScorecards(scorecards);
+    const latest = scorecards[0];
+    if (latest) {
+      setScoreRows(scorecardToRows(latest));
+    } else {
+      setScoreRows(emptyScoreRows());
     }
 
     setIsLoading(false);
@@ -217,6 +220,28 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
   useEffect(() => {
     void loadDashboard();
   }, []);
+
+  const courseById = useMemo(() => {
+    return new Map(golfCourses.map((course) => [course.id, course]));
+  }, [golfCourses]);
+
+  const selectedUploadCourse = useMemo(() => {
+    return golfCourses.find((course) => course.id === scorecardForm.courseId) ?? null;
+  }, [golfCourses, scorecardForm.courseId]);
+
+  const tabs = useMemo(
+    () =>
+      TABS.map((tab) =>
+        tab.id === "upload"
+          ? {
+              ...tab,
+              label: userRole === "admin" ? "Upload Scorecard" : "Scorecards",
+              shortLabel: userRole === "admin" ? "Upload" : "Cards",
+            }
+          : tab,
+      ),
+    [userRole],
+  );
 
   const leaderboard = useMemo(() => {
     return [...scoreRows]
@@ -317,6 +342,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
     setScheduleForm({
       kind: "round",
       title: "",
+      courseId: "",
       course: "",
       date: "",
       notes: "",
@@ -329,12 +355,19 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
     setIsSavingScorecard(true);
     setError(null);
 
+    if (!scorecardForm.courseId) {
+      setError("Select a course with a saved scorecard (par and handicap ranks).");
+      setIsSavingScorecard(false);
+      return;
+    }
+
     const response = await fetch("/api/scorecards", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        courseId: scorecardForm.courseId,
         course: scorecardForm.course,
         date: scorecardForm.date,
         players: scoreCardPlayers.filter((p) => p.playerName.trim().length > 0),
@@ -353,7 +386,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
     const payload = (await response.json()) as { scorecard: SavedScorecard };
     setScoreRows(scorecardToRows(payload.scorecard));
 
-    setScorecardForm({ course: "", date: "" });
+    setScorecardForm({ courseId: "", course: "", date: "" });
     setScorecardPlayers(defaultScorecardPlayers());
     setIsSavingScorecard(false);
     await loadDashboard();
@@ -460,7 +493,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
 
       <nav className="sticky top-0 z-10 border-b border-stone-200 bg-white sm:static sm:border-0 sm:bg-transparent" aria-label="Dashboard sections">
         <div className="-mb-px flex overflow-x-auto overscroll-x-contain sm:grid sm:grid-cols-3 sm:gap-2 lg:grid-cols-6">
-        {TABS.map((tab) => {
+        {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
             <button
@@ -628,6 +661,12 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                         ? "Venue TBD"
                         : item.course
                       : item.course}
+                    {item.kind === "round" && item.courseId ? (
+                      <span className="text-stone-500">
+                        {" "}
+                        · Par {courseById.get(item.courseId)?.totalPar ?? "—"}
+                      </span>
+                    ) : null}
                   </p>
                   <p className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-800">
                     {item.date}
@@ -640,7 +679,51 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
             </div>
 
             {userRole === "admin" ? (
-              <form className="mt-6 space-y-3 border-t border-stone-200 pt-4 sm:rounded-xl sm:border sm:bg-white sm:p-4" onSubmit={handleScheduleCreate}>
+              <div className="mt-6 space-y-4 border-t border-stone-200 pt-4 sm:rounded-xl sm:border sm:bg-white sm:p-4">
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-600">
+                      Course library
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => setShowCourseSetup((open) => !open)}
+                      className="text-xs font-semibold text-emerald-800"
+                    >
+                      {showCourseSetup ? "Hide" : "New course"}
+                    </button>
+                  </div>
+                  <p className="mt-1 text-xs text-stone-500">
+                    Save par and handicap stroke ranks once per course, then reuse when scheduling
+                    and logging rounds.
+                  </p>
+                  {golfCourses.length > 0 ? (
+                    <ul className="mt-2 space-y-1 text-sm text-stone-700">
+                      {golfCourses.map((course) => (
+                        <li key={course.id}>
+                          <span className="font-semibold">{course.name}</span>
+                          <span className="text-stone-500"> · Par {course.totalPar}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-sm text-stone-500">No courses saved yet.</p>
+                  )}
+                  {showCourseSetup ? (
+                    <div className="mt-4 border-t border-stone-200 pt-4">
+                      <CourseSetupForm
+                        onCreated={(course) => {
+                          setGolfCourses((previous) =>
+                            [...previous, course].sort((a, b) => a.name.localeCompare(b.name)),
+                          );
+                          setShowCourseSetup(false);
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+
+              <form className="space-y-3 border-t border-stone-200 pt-4" onSubmit={handleScheduleCreate}>
                 <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-600">
                   Admin: Add to schedule
                 </h4>
@@ -679,23 +762,47 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                   className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
                   required
                 />
-                <input
-                  type="text"
-                  value={scheduleForm.course}
-                  onChange={(event) =>
-                    setScheduleForm((previous) => ({
-                      ...previous,
-                      course: event.target.value,
-                    }))
-                  }
-                  placeholder={
-                    scheduleForm.kind === "dinner"
-                      ? "Restaurant or venue (optional)"
-                      : "Course name"
-                  }
-                  className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
-                  required={scheduleForm.kind === "round"}
-                />
+                {scheduleForm.kind === "round" ? (
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
+                      Course
+                    </label>
+                    <select
+                      value={scheduleForm.courseId}
+                      onChange={(event) => {
+                        const courseId = event.target.value;
+                        const course = golfCourses.find((entry) => entry.id === courseId);
+                        setScheduleForm((previous) => ({
+                          ...previous,
+                          courseId,
+                          course: course?.name ?? "",
+                        }));
+                      }}
+                      className="mt-2 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
+                      required
+                    >
+                      <option value="">Select a saved course</option>
+                      {golfCourses.map((course) => (
+                        <option key={course.id} value={course.id}>
+                          {course.name} (Par {course.totalPar})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    value={scheduleForm.course}
+                    onChange={(event) =>
+                      setScheduleForm((previous) => ({
+                        ...previous,
+                        course: event.target.value,
+                      }))
+                    }
+                    placeholder="Restaurant or venue (optional)"
+                    className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
+                  />
+                )}
                 <input
                   type="date"
                   value={scheduleForm.date}
@@ -732,34 +839,51 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                   {isSavingSchedule ? "Adding..." : "Add to schedule"}
                 </button>
               </form>
+              </div>
             ) : null}
           </section>
         ) : null}
 
         {activeTab === "upload" ? (
           <section>
+            {userRole === "admin" ? (
+              <>
             <h2 className="text-lg font-bold text-stone-900">Upload Scorecard</h2>
-            <p className="mt-1 text-sm text-stone-600">
-              Manually enter hole-by-hole scores for each player.
+            <p className="mt-1 hidden text-sm text-stone-600 sm:block">
+              Tap a score for each hole — it advances automatically. Use player chips to switch
+              foursomes.
             </p>
 
             <form className="mt-6 space-y-6" onSubmit={handleScorecardSubmit}>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="text-sm font-semibold text-stone-700">Course Name</label>
-                  <input
-                    type="text"
-                    value={scorecardForm.course}
-                    onChange={(event) =>
+                  <label className="text-sm font-semibold text-stone-700">Course</label>
+                  <select
+                    value={scorecardForm.courseId}
+                    onChange={(event) => {
+                      const courseId = event.target.value;
+                      const course = golfCourses.find((entry) => entry.id === courseId);
                       setScorecardForm((previous) => ({
                         ...previous,
-                        course: event.target.value,
-                      }))
-                    }
-                    placeholder="e.g., Timberline Golf Club"
+                        courseId,
+                        course: course?.name ?? "",
+                      }));
+                    }}
                     className="mt-2 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
                     required
-                  />
+                  >
+                    <option value="">Select course</option>
+                    {golfCourses.map((course) => (
+                      <option key={course.id} value={course.id}>
+                        {course.name} (Par {course.totalPar})
+                      </option>
+                    ))}
+                  </select>
+                  {golfCourses.length === 0 ? (
+                    <p className="mt-2 text-xs text-amber-800">
+                      Add a course under Schedule → Course library before logging scores.
+                    </p>
+                  ) : null}
                 </div>
                 <div>
                   <label className="text-sm font-semibold text-stone-700">Round Date</label>
@@ -778,69 +902,21 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                 </div>
               </div>
 
-              <div className="space-y-4">
-                {scoreCardPlayers.map((player, playerIndex) => (
-                  <div
-                    key={playerIndex}
-                    className="border-t border-stone-200 pt-4 first:border-t-0 first:pt-0 sm:rounded-xl sm:border sm:bg-stone-50 sm:p-4"
-                  >
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm font-semibold text-stone-700">Player Name</label>
-                      <input
-                        type="text"
-                        value={player.playerName}
-                        onChange={(event) => {
-                          const next = [...scoreCardPlayers];
-                          next[playerIndex] = { ...next[playerIndex], playerName: event.target.value };
-                          setScorecardPlayers(next);
-                        }}
-                        placeholder="e.g., MinJungKyu"
-                        className="flex-1 rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
-                      />
-                    </div>
-
-                    <div className="mt-3 grid grid-cols-9 gap-2 sm:grid-cols-9">
-                      {player.holes.map((score, holeIndex) => (
-                        <div key={holeIndex} className="flex flex-col">
-                          <label className="text-xs font-semibold text-stone-600">H{holeIndex + 1}</label>
-                          <input
-                            type="number"
-                            min="0"
-                            max="13"
-                            value={score === 0 ? "" : score}
-                            onChange={(event) => {
-                              const next = [...scoreCardPlayers];
-                              const nextHoles = [...next[playerIndex].holes];
-                              nextHoles[holeIndex] = event.target.value ? Number(event.target.value) : 0;
-                              next[playerIndex] = {
-                                ...next[playerIndex],
-                                holes: nextHoles,
-                              };
-                              setScorecardPlayers(next);
-                            }}
-                            className="mt-1 rounded border border-stone-300 bg-white px-2 py-1 text-center text-sm text-stone-800 outline-none transition focus:border-emerald-700"
-                            placeholder="-"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <ScorecardEntry
+                players={scoreCardPlayers}
+                onChange={setScorecardPlayers}
+                courseLayout={
+                  selectedUploadCourse
+                    ? {
+                        holePars: selectedUploadCourse.holePars,
+                        strokeIndexes: selectedUploadCourse.strokeIndexes,
+                      }
+                    : null
+                }
+                playerHandicaps={handicapsByPlayer}
+              />
 
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setScorecardPlayers((previous) => [
-                      ...previous,
-                      { playerName: "", holes: Array(18).fill(0) },
-                    ]);
-                  }}
-                  className="rounded-xl border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-700 transition hover:border-emerald-700 hover:text-emerald-800"
-                >
-                  Add Player
-                </button>
                 <button
                   type="submit"
                   disabled={isSavingScorecard}
@@ -850,6 +926,16 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                 </button>
               </div>
             </form>
+              </>
+            ) : (
+              <>
+                <h2 className="text-lg font-bold text-stone-900">Scorecards</h2>
+                <p className="mt-1 hidden text-sm text-stone-600 sm:block">
+                  Expand a course to see each round, then a player to view every stroke.
+                </p>
+                <ScorecardsPanel scorecards={savedScorecards} />
+              </>
+            )}
           </section>
         ) : null}
 

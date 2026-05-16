@@ -89,8 +89,8 @@ export function DashboardOverview({
           </dl>
         ) : (
           <p className="mt-4 text-sm text-stone-600">
-            No scorecard posted yet for your round. Upload scores on the Upload Scorecard tab
-            to see your trip position and net total.
+            No scorecard posted yet for your round. Once scores are entered, your trip position
+            and net total will appear here.
           </p>
         )}
       </article>

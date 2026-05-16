@@ -10,6 +10,7 @@ import {
 } from "@/drizzle/schema";
 import { getDb } from "@/lib/db/client";
 import { seedDatabaseIfEmpty } from "@/lib/db/seed";
+import { createGolfCourse, getGolfCourseById, listGolfCourses } from "@/lib/db/courses";
 import {
   endActiveWeekend,
   findScheduleEntryIdForScorecard,
@@ -36,6 +37,8 @@ export {
   requireActiveWeekendId,
   startNewWeekend,
 } from "@/lib/db/weekends";
+export { createGolfCourse, getGolfCourseById, listGolfCourses } from "@/lib/db/courses";
+export type { GolfCourseLayout } from "@/lib/golf-course";
 
 export const SESSION_COOKIE_NAME = "myscorecard_session";
 
@@ -54,6 +57,7 @@ export type ScheduleEntry = {
   kind: ScheduleKind;
   title: string;
   course: string;
+  courseId?: string;
   date: string;
   notes?: string;
   createdAt: string;
@@ -67,6 +71,7 @@ export type PlayerScores = {
 export type Scorecard = {
   id: string;
   course: string;
+  courseId?: string;
   date: string;
   players: PlayerScores[];
   createdAt: string;
@@ -150,6 +155,7 @@ function mapSchedule(row: typeof scheduleEntries.$inferSelect): ScheduleEntry {
     kind: row.kind,
     title: row.title,
     course: row.course,
+    courseId: row.courseId ?? undefined,
     date: row.date,
     notes: row.notes ?? undefined,
     createdAt: row.createdAt.toISOString(),
@@ -160,6 +166,7 @@ function mapScorecard(row: typeof scorecards.$inferSelect): Scorecard {
   return {
     id: row.id,
     course: row.course,
+    courseId: row.courseId ?? undefined,
     date: row.date,
     players: row.players,
     createdAt: row.createdAt.toISOString(),
@@ -292,19 +299,22 @@ export async function getAuthUserFromRequestToken(
 export async function getDashboardConfiguration(): Promise<{
   teams: DashboardTeam[];
   schedule: ScheduleEntry[];
+  courses: Awaited<ReturnType<typeof listGolfCourses>>;
   activeWeekend: Awaited<ReturnType<typeof getActiveWeekend>>;
 }> {
   await ensureDatabaseReady();
   const activeWeekend = await getActiveWeekend();
+  const courses = await listGolfCourses();
 
   if (!activeWeekend) {
-    return { teams: [], schedule: [], activeWeekend: null };
+    return { teams: [], schedule: [], courses, activeWeekend: null };
   }
 
   const data = await getWeekendDashboardData(activeWeekend.id);
   return {
     teams: data.teams,
     schedule: data.schedule,
+    courses,
     activeWeekend,
   };
 }
@@ -337,6 +347,7 @@ export async function addScheduleEntry(entry: {
   date: string;
   notes?: string;
   kind?: ScheduleKind;
+  courseId?: string;
 }): Promise<ScheduleEntry> {
   await ensureDatabaseReady();
   const weekendId = await requireActiveWeekendId();
@@ -350,6 +361,7 @@ export async function addScheduleEntry(entry: {
       kind,
       title: entry.title,
       course: entry.course,
+      courseId: entry.courseId ?? null,
       date: entry.date,
       notes: entry.notes,
     })
@@ -362,6 +374,7 @@ export async function saveScorecard(scorecard: {
   course: string;
   date: string;
   players: PlayerScores[];
+  courseId?: string;
 }): Promise<Scorecard> {
   await ensureDatabaseReady();
   const weekendId = await requireActiveWeekendId();
@@ -377,6 +390,7 @@ export async function saveScorecard(scorecard: {
     .values({
       weekendId,
       scheduleEntryId,
+      courseId: scorecard.courseId ?? null,
       course: scorecard.course,
       date: scorecard.date,
       players: scorecard.players,

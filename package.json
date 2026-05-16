@@ -17,7 +17,8 @@
     "db:add-usernames": "tsx scripts/apply-username-migration.ts",
     "db:add-handicaps": "tsx scripts/apply-handicap-migration.ts",
     "db:add-weekends": "tsx scripts/apply-weekends-migration.ts",
-    "db:add-schedule-kind": "tsx scripts/apply-schedule-kind-migration.ts"
+    "db:add-schedule-kind": "tsx scripts/apply-schedule-kind-migration.ts",
+    "db:add-golf-courses": "tsx scripts/apply-golf-courses-migration.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
