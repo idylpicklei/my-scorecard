@@ -32,7 +32,7 @@ export function LogoutButton() {
         type="button"
         onClick={handleLogout}
         disabled={isSubmitting}
-        className="rounded-xl border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700 transition hover:border-stone-900 hover:text-stone-900 disabled:cursor-not-allowed disabled:opacity-60"
+        className="shrink-0 rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-semibold text-stone-700 transition hover:border-stone-900 hover:text-stone-900 disabled:cursor-not-allowed disabled:opacity-60 sm:rounded-xl sm:px-4 sm:py-2 sm:text-sm"
       >
         {isSubmitting ? "Signing out..." : "Sign out"}
       </button>

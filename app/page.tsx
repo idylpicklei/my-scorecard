@@ -19,21 +19,21 @@ export default async function Home() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[linear-gradient(130deg,_#ecfdf5_0%,_#f0f9ff_55%,_#fff7ed_100%)] px-4 py-10">
-      <section className="w-full max-w-5xl rounded-3xl border border-emerald-900/10 bg-white/80 p-8 shadow-2xl backdrop-blur-sm sm:p-12">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-700">
-              2026 Spring Breakfast Balls Tournament
+    <main className="min-h-dvh bg-stone-100 sm:bg-[linear-gradient(130deg,_#ecfdf5_0%,_#f0f9ff_55%,_#fff7ed_100%)] sm:flex sm:items-start sm:justify-center sm:px-4 sm:py-8">
+      <section className="mx-auto w-full max-w-5xl bg-white sm:rounded-2xl sm:border sm:border-emerald-900/10 sm:bg-white/90 sm:p-8 sm:shadow-xl sm:backdrop-blur-sm lg:p-10">
+        <header className="flex items-start justify-between gap-3 border-b border-stone-200 px-4 py-3 sm:border-0 sm:px-0 sm:py-0">
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-700 sm:text-xs sm:tracking-[0.3em]">
+              2026 Spring Breakfast Balls
             </p>
-            <h1 className="mt-3 text-3xl font-black text-stone-900 sm:text-4xl">
-              The Breakfast Balls Tournament
+            <h1 className="mt-1 text-xl font-black leading-tight text-stone-900 sm:mt-3 sm:text-3xl lg:text-4xl">
+              Breakfast Balls Tournament
             </h1>
           </div>
           <LogoutButton />
-        </div>
+        </header>
 
-        <div className="mt-8">
+        <div className="sm:mt-8">
           <DashboardTabs
             userRole={user.role}
             currentUser={{

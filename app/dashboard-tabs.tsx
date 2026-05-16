@@ -17,15 +17,16 @@ type UserRole = "admin" | "member";
 type TabConfig = {
   id: DashboardTab;
   label: string;
+  shortLabel: string;
 };
 
 const TABS: TabConfig[] = [
-  { id: "overview", label: "Overview" },
-  { id: "scoreboard", label: "Score Board" },
-  { id: "upload", label: "Upload Scorecard" },
-  { id: "schedule", label: "Schedule" },
-  { id: "games", label: "Games" },
-  { id: "weekends", label: "Weekends" },
+  { id: "overview", label: "Overview", shortLabel: "Home" },
+  { id: "scoreboard", label: "Score Board", shortLabel: "Scores" },
+  { id: "upload", label: "Upload Scorecard", shortLabel: "Upload" },
+  { id: "schedule", label: "Schedule", shortLabel: "Schedule" },
+  { id: "games", label: "Games", shortLabel: "Games" },
+  { id: "weekends", label: "Weekends", shortLabel: "Trips" },
 ];
 
 type ScoreRow = {
@@ -422,56 +423,43 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
 
   if (isLoading) {
     return (
-      <div className="rounded-2xl border border-stone-200 bg-stone-50/70 p-6 text-sm text-stone-600">
-        Loading weekend dashboard...
-      </div>
+      <p className="px-4 py-8 text-sm text-stone-600 sm:px-0">Loading weekend dashboard...</p>
     );
   }
 
   return (
-    <div className="rounded-2xl border border-stone-200 bg-stone-50/70 p-4 sm:p-6">
+    <div>
       {error ? (
-        <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <p className="border-b border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700 sm:mb-4 sm:rounded-lg sm:border sm:px-4 sm:py-3">
           {error}
         </p>
       ) : null}
 
       {activeWeekend ? (
-        <div className="mb-4 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white px-5 py-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-emerald-800">
-            Active weekend
-          </p>
-          <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-xl font-bold text-stone-900">{activeWeekend.title}</h2>
-              <p className="mt-1 text-sm text-stone-600">
-                {activeWeekend.startDate}
-                {activeWeekend.endDate ? ` – ${activeWeekend.endDate}` : ""}
-              </p>
-            </div>
-            <div className="rounded-xl border border-emerald-200 bg-white px-5 py-3 text-center sm:min-w-[140px]">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">
-                Rounds left
-              </p>
-              <p className="text-3xl font-black text-emerald-800">{activeWeekend.roundsLeft}</p>
-              <p className="text-xs text-stone-500">
-                {activeWeekend.roundsCompleted} / {activeWeekend.roundsScheduled} played
-              </p>
-            </div>
+        <div className="flex items-center justify-between gap-3 border-b border-emerald-200/80 bg-emerald-50/90 px-4 py-2.5 sm:mb-4 sm:rounded-xl sm:border sm:border-emerald-200 sm:px-4 sm:py-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-stone-900 sm:text-base">{activeWeekend.title}</p>
+            <p className="text-xs text-stone-600">
+              {activeWeekend.startDate}
+              {activeWeekend.endDate ? ` – ${activeWeekend.endDate}` : ""}
+            </p>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-500">Rounds left</p>
+            <p className="text-2xl font-black leading-none text-emerald-800 sm:text-3xl">{activeWeekend.roundsLeft}</p>
+            <p className="text-[10px] text-stone-500">
+              {activeWeekend.roundsCompleted}/{activeWeekend.roundsScheduled}
+            </p>
           </div>
         </div>
       ) : (
-        <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
-          <p className="text-sm font-semibold text-amber-900">No active weekend</p>
-          <p className="mt-1 text-sm text-amber-800">
-            {userRole === "admin"
-              ? "Use the Weekends tab to end the current trip or start the next one."
-              : "Ask an admin to start the next golf weekend."}
-          </p>
-        </div>
+        <p className="border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 sm:mb-4 sm:rounded-lg sm:border sm:px-4 sm:py-3">
+          {userRole === "admin" ? "No active weekend — open Trips to start one." : "No active weekend yet."}
+        </p>
       )}
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <nav className="sticky top-0 z-10 border-b border-stone-200 bg-white sm:static sm:border-0 sm:bg-transparent" aria-label="Dashboard sections">
+        <div className="-mb-px flex overflow-x-auto overscroll-x-contain sm:grid sm:grid-cols-3 sm:gap-2 lg:grid-cols-6">
         {TABS.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
@@ -479,33 +467,34 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`rounded-xl border px-4 py-3 text-sm font-semibold uppercase tracking-[0.15em] transition ${
+              className={`shrink-0 border-b-2 px-4 py-3 text-xs font-semibold transition sm:rounded-xl sm:border sm:border-b-2 sm:px-3 sm:py-2.5 sm:text-sm ${
                 isActive
-                  ? "border-emerald-700 bg-emerald-700 text-white"
-                  : "border-stone-300 bg-white text-stone-700 hover:border-emerald-700 hover:text-emerald-800"
+                  ? "border-emerald-700 text-emerald-800 sm:border-emerald-700 sm:bg-emerald-700 sm:text-white"
+                  : "border-transparent text-stone-600 sm:border-stone-300 sm:bg-white sm:text-stone-700"
               }`}
             >
-              {tab.label}
+              <span className="sm:hidden">{tab.shortLabel}</span>
+              <span className="hidden sm:inline">{tab.label}</span>
             </button>
           );
         })}
-      </div>
+        </div>
+      </nav>
 
-      <div className="mt-6 rounded-2xl border border-stone-200 bg-white p-5 sm:p-6">
+      <div className="px-4 py-4 sm:mt-6 sm:rounded-2xl sm:border sm:border-stone-200 sm:bg-white sm:p-6">
         {activeTab === "overview" ? (
           <DashboardOverview
             currentUser={currentUser}
             teams={teams}
             scoreRows={scoreRows}
             handicapsByPlayer={handicapsByPlayer}
-            activeWeekend={activeWeekend}
           />
         ) : null}
 
         {activeTab === "scoreboard" ? (
           <section>
             <h2 className="text-lg font-bold text-stone-900">Score Board</h2>
-            <p className="mt-1 text-sm text-stone-600">
+            <p className="mt-1 hidden text-sm text-stone-600 sm:block">
               Current round leaderboard for your foursome.
             </p>
             <div className="mt-4 overflow-x-auto">
@@ -539,15 +528,15 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
               </table>
             </div>
 
-            <div className="mt-6 rounded-xl border border-stone-200 bg-stone-50 p-4">
+            <div className="mt-6 border-t border-stone-200 pt-4 sm:rounded-xl sm:border sm:bg-stone-50 sm:p-4">
               <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-stone-700">
                 Teams
               </h3>
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="mt-3 divide-y divide-stone-200 sm:grid sm:grid-cols-2 sm:gap-3 sm:divide-none">
                 {teamScores.map((team) => (
                   <article
                     key={team.name}
-                    className="rounded-xl border border-stone-200 bg-white p-4"
+                    className="border-b border-stone-200 py-3 last:border-b-0 sm:rounded-xl sm:border sm:bg-white sm:p-4"
                   >
                     <p className="text-sm font-bold text-stone-900">{team.name}</p>
                     <p className="mt-1 text-sm text-stone-600">
@@ -566,7 +555,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                     Admin team editor
                   </h4>
                   {teamDraft.map((team, index) => (
-                    <div key={team.id} className="rounded-xl border border-stone-200 bg-white p-3">
+                    <div key={team.id} className="border-b border-stone-200 py-3 last:border-b-0 sm:rounded-xl sm:border sm:bg-white sm:p-3">
                       <label className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-600">
                         {team.name}
                       </label>
@@ -606,19 +595,19 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
         {activeTab === "schedule" ? (
           <section>
             <h2 className="text-lg font-bold text-stone-900">Weekend schedule</h2>
-            <p className="mt-1 text-sm text-stone-600">
+            <p className="mt-1 hidden text-sm text-stone-600 sm:block">
               Add golf rounds and dinner plans. Only golf rounds count toward &quot;rounds left&quot;
               on the dashboard.
             </p>
 
-            <div className="mt-4 space-y-3">
+            <div className="mt-4 sm:space-y-3">
               {schedule.map((item) => (
                 <article
                   key={item.id}
-                  className={`rounded-xl border p-4 ${
+                  className={`border-b py-3 last:border-b-0 sm:rounded-xl sm:border sm:p-4 ${
                     item.kind === "dinner"
-                      ? "border-amber-200 bg-amber-50/80"
-                      : "border-stone-200 bg-stone-50"
+                      ? "border-amber-200/80 sm:border-amber-200 sm:bg-amber-50/80"
+                      : "border-stone-200 sm:bg-stone-50"
                   }`}
                 >
                   <div className="flex flex-wrap items-center gap-2">
@@ -651,7 +640,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
             </div>
 
             {userRole === "admin" ? (
-              <form className="mt-6 space-y-3 rounded-xl border border-stone-200 bg-white p-4" onSubmit={handleScheduleCreate}>
+              <form className="mt-6 space-y-3 border-t border-stone-200 pt-4 sm:rounded-xl sm:border sm:bg-white sm:p-4" onSubmit={handleScheduleCreate}>
                 <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-600">
                   Admin: Add to schedule
                 </h4>
@@ -793,7 +782,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                 {scoreCardPlayers.map((player, playerIndex) => (
                   <div
                     key={playerIndex}
-                    className="rounded-xl border border-stone-200 bg-stone-50 p-4"
+                    className="border-t border-stone-200 pt-4 first:border-t-0 first:pt-0 sm:rounded-xl sm:border sm:bg-stone-50 sm:p-4"
                   >
                     <div className="flex items-center gap-2">
                       <label className="text-sm font-semibold text-stone-700">Player Name</label>
@@ -867,25 +856,10 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
         {activeTab === "weekends" ? (
           <section>
             <h2 className="text-lg font-bold text-stone-900">Weekends</h2>
-            <p className="mt-1 text-sm text-stone-600">
+            <p className="mt-1 hidden text-sm text-stone-600 sm:block">
               Manage the active weekend and browse past trips. Admins can end or start weekends
               below.
             </p>
-
-            {activeWeekend ? (
-              <article className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-800">
-                  Current
-                </p>
-                <p className="mt-1 text-base font-bold text-stone-900">{activeWeekend.title}</p>
-                <p className="mt-1 text-sm text-stone-600">
-                  {activeWeekend.startDate}
-                  {activeWeekend.endDate ? ` – ${activeWeekend.endDate}` : ""} ·{" "}
-                  {activeWeekend.roundsLeft} round
-                  {activeWeekend.roundsLeft === 1 ? "" : "s"} left
-                </p>
-              </article>
-            ) : null}
 
             <div className="mt-4 space-y-3">
               <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-stone-600">
@@ -897,7 +871,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                 pastWeekends.map((weekend) => (
                   <article
                     key={weekend.id}
-                    className="rounded-xl border border-stone-200 bg-stone-50 p-4"
+                    className="border-b border-stone-200 py-3 last:border-b-0 sm:rounded-xl sm:border sm:bg-stone-50 sm:p-4"
                   >
                     <p className="text-sm font-bold text-stone-900">{weekend.title}</p>
                     <p className="mt-1 text-sm text-stone-600">
@@ -913,7 +887,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
             </div>
 
             {userRole === "admin" && activeWeekend ? (
-              <div className="mt-6 space-y-3 rounded-xl border border-red-100 bg-red-50/50 p-4">
+              <div className="mt-6 space-y-3 border-t border-red-200/80 pt-4 sm:rounded-xl sm:border sm:border-red-100 sm:bg-red-50/50 sm:p-4">
                 <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-red-800">
                   End weekend
                 </h4>
@@ -943,7 +917,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
 
             {userRole === "admin" ? (
               <form
-                className="mt-6 space-y-3 rounded-xl border border-stone-200 bg-white p-4"
+                className="mt-6 space-y-3 border-t border-stone-200 pt-4 sm:rounded-xl sm:border sm:bg-white sm:p-4"
                 onSubmit={handleStartWeekend}
               >
                 <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-600">
@@ -1013,7 +987,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
               {GAMES.map((game) => (
                 <article
                   key={game.name}
-                  className="rounded-xl border border-stone-200 bg-stone-50 p-4"
+                  className="border-b border-stone-200 py-3 last:border-b-0 sm:rounded-xl sm:border sm:bg-stone-50 sm:p-4"
                 >
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <h3 className="text-base font-semibold text-stone-900">{game.name}</h3>
