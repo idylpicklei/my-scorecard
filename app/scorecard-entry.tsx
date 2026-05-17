@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { handicapStrokesOnHole, scoreToPar } from "@/lib/golf-course";
+import {
+  handicapStrokesOnHole,
+  lookupPlayerHandicap,
+  lowestHandicapInGroup,
+  relativePlayingHandicap,
+  scoreToPar,
+  type CourseLayout,
+} from "@/lib/golf-course";
 
 export type ScorecardEntryPlayer = {
   playerName: string;
   holes: number[];
-};
-
-export type CourseLayout = {
-  holePars: number[];
-  strokeIndexes: number[];
 };
 
 type ScorecardEntryProps = {
@@ -18,21 +20,8 @@ type ScorecardEntryProps = {
   onChange: (players: ScorecardEntryPlayer[]) => void;
   courseLayout?: CourseLayout | null;
   playerHandicaps?: Record<string, number>;
+  roundLabel?: string;
 };
-
-function lookupHandicap(playerName: string, handicaps?: Record<string, number>) {
-  if (!handicaps) {
-    return 0;
-  }
-  const key = playerName.trim().toLowerCase();
-  if (key in handicaps) {
-    return handicaps[key];
-  }
-  const match = Object.entries(handicaps).find(
-    ([name]) => name.toLowerCase() === key,
-  );
-  return match?.[1] ?? 0;
-}
 
 const QUICK_SCORES = [2, 3, 4, 5, 6, 7, 8, 9] as const;
 const MIN_SCORE = 1;
@@ -51,17 +40,63 @@ function nineLabel(index: number) {
   return index < 9 ? "Front 9" : "Back 9";
 }
 
+function groupPlayerNames(players: ScorecardEntryPlayer[]) {
+  const named = players.map((player) => player.playerName.trim()).filter(Boolean);
+  return named.length > 0 ? named : [];
+}
+
+function playersReceivingStrokeOnHole(
+  holeIndex: number,
+  playerNames: string[],
+  handicaps: Record<string, number>,
+  courseLayout: CourseLayout,
+) {
+  const strokeIndex = courseLayout.strokeIndexes[holeIndex];
+  if (strokeIndex < 1) {
+    return [];
+  }
+
+  return playerNames.filter((name) => {
+    const relative = relativePlayingHandicap(name, playerNames, handicaps);
+    return handicapStrokesOnHole(relative, strokeIndex) > 0;
+  });
+}
+
 export function ScorecardEntry({
   players,
   onChange,
   courseLayout,
-  playerHandicaps,
+  playerHandicaps = {},
+  roundLabel,
 }: ScorecardEntryProps) {
   const [activePlayerIndex, setActivePlayerIndex] = useState(0);
   const [activeHole, setActiveHole] = useState(0);
 
   const safePlayerIndex = Math.min(activePlayerIndex, Math.max(players.length - 1, 0));
   const activePlayer = players[safePlayerIndex];
+  const groupNames = useMemo(() => groupPlayerNames(players), [players]);
+  const lowestHcp = useMemo(
+    () => lowestHandicapInGroup(groupNames, playerHandicaps),
+    [groupNames, playerHandicaps],
+  );
+
+  const holeStrokePlan = useMemo(() => {
+    if (!courseLayout) {
+      return [];
+    }
+
+    return Array.from({ length: 18 }, (_, holeIndex) => ({
+      holeIndex,
+      par: courseLayout.holePars[holeIndex] ?? 0,
+      strokeIndex: courseLayout.strokeIndexes[holeIndex] ?? 0,
+      receivers: playersReceivingStrokeOnHole(
+        holeIndex,
+        groupNames,
+        playerHandicaps,
+        courseLayout,
+      ),
+    }));
+  }, [courseLayout, groupNames, playerHandicaps]);
 
   useEffect(() => {
     if (activePlayerIndex !== safePlayerIndex) {
@@ -75,7 +110,6 @@ export function ScorecardEntry({
       return;
     }
     setActiveHole(firstOpenHole(player.holes));
-    // Only jump holes when switching players, not on each score tap.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [safePlayerIndex]);
 
@@ -129,17 +163,92 @@ export function ScorecardEntry({
   const filledCount = activePlayer.holes.filter((score) => score > 0).length;
   const holePar = courseLayout?.holePars[activeHole] ?? 0;
   const strokeIndex = courseLayout?.strokeIndexes[activeHole] ?? 0;
-  const playingHandicap = Math.round(lookupHandicap(activePlayer.playerName, playerHandicaps));
-  const strokesReceived =
-    strokeIndex > 0 ? handicapStrokesOnHole(playingHandicap, strokeIndex) : 0;
+  const activeRelativeHcp = relativePlayingHandicap(
+    activePlayer.playerName,
+    groupNames,
+    playerHandicaps,
+  );
+  const activeStrokesReceived =
+    strokeIndex > 0 ? handicapStrokesOnHole(activeRelativeHcp, strokeIndex) : 0;
   const toPar = holePar > 0 ? scoreToPar(currentScore, holePar) : null;
+  const activeHoleReceivers = courseLayout
+    ? playersReceivingStrokeOnHole(activeHole, groupNames, playerHandicaps, courseLayout)
+    : [];
 
   return (
     <div className="space-y-4">
+      {roundLabel ? (
+        <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-900">
+          {roundLabel}
+        </p>
+      ) : null}
+
+      {courseLayout && groupNames.length > 0 ? (
+        <div className="rounded-xl border border-stone-200 bg-white p-3 sm:p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
+            Strokes by hole
+          </p>
+          <p className="mt-1 text-xs text-stone-600">
+            Lowest handicap in group: <span className="font-semibold text-stone-900">{lowestHcp}</span>
+            . Others receive strokes on the hardest holes (handicap rank 1 = hardest).
+          </p>
+          <div className="mt-3 max-h-56 overflow-y-auto rounded-lg border border-stone-100">
+            <table className="min-w-full text-xs">
+              <thead className="sticky top-0 bg-stone-50 text-left text-[10px] uppercase tracking-[0.1em] text-stone-500">
+                <tr>
+                  <th className="px-2 py-1.5">Hole</th>
+                  <th className="px-2 py-1.5">Par</th>
+                  <th className="px-2 py-1.5">Rank</th>
+                  <th className="px-2 py-1.5">Stroke</th>
+                </tr>
+              </thead>
+              <tbody>
+                {holeStrokePlan.map((hole) => (
+                  <tr
+                    key={hole.holeIndex}
+                    className={`border-t border-stone-100 ${
+                      hole.holeIndex === activeHole ? "bg-emerald-50" : ""
+                    }`}
+                  >
+                    <td className="px-2 py-1.5 font-semibold text-stone-900">
+                      {hole.holeIndex + 1}
+                    </td>
+                    <td className="px-2 py-1.5 tabular-nums text-stone-700">{hole.par || "—"}</td>
+                    <td className="px-2 py-1.5 tabular-nums text-stone-500">
+                      {hole.strokeIndex || "—"}
+                    </td>
+                    <td className="px-2 py-1.5 text-stone-800">
+                      {hole.receivers.length > 0 ? hole.receivers.join(", ") : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <ul className="mt-3 space-y-1 text-xs text-stone-600">
+            {groupNames.map((name) => {
+              const hcp = lookupPlayerHandicap(name, playerHandicaps);
+              const relative = Math.max(0, Math.round(hcp - lowestHcp));
+              return (
+                <li key={name}>
+                  <span className="font-semibold text-stone-800">{name}</span> · {hcp} hcp
+                  {relative > 0 ? ` · ${relative} stroke${relative === 1 ? "" : "s"}` : " · scratch"}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+
       <div className="flex gap-2 overflow-x-auto pb-1">
         {players.map((player, index) => {
           const isActive = index === safePlayerIndex;
           const done = player.holes.every((score) => score > 0);
+          const name = player.playerName.trim() || `Player ${index + 1}`;
+          const relative =
+            name && groupNames.some((entry) => entry.toLowerCase() === name.toLowerCase())
+              ? relativePlayingHandicap(name, groupNames, playerHandicaps)
+              : 0;
 
           return (
             <button
@@ -154,7 +263,8 @@ export function ScorecardEntry({
                     : "border-stone-300 bg-white text-stone-700"
               }`}
             >
-              {player.playerName.trim() || `Player ${index + 1}`}
+              {name}
+              {relative > 0 ? ` (+${relative})` : ""}
               {done ? " ✓" : ""}
             </button>
           );
@@ -193,12 +303,7 @@ export function ScorecardEntry({
             </p>
             <p className="text-2xl font-black text-stone-900">Hole {activeHole + 1}</p>
             {holePar > 0 ? (
-              <p className="mt-0.5 text-sm font-semibold text-stone-700">
-                Par {holePar}
-                {strokesReceived > 0
-                  ? ` · ${strokesReceived} stroke${strokesReceived === 1 ? "" : "s"}`
-                  : ""}
-              </p>
+              <p className="mt-0.5 text-sm font-semibold text-stone-700">Par {holePar}</p>
             ) : null}
             <p className="mt-1 text-xs text-stone-600">
               {filledCount}/18 logged · Tap a score to jump ahead
@@ -210,6 +315,23 @@ export function ScorecardEntry({
             <p className="font-semibold text-stone-900">Total: {roundTotal || "—"}</p>
           </div>
         </div>
+
+        {courseLayout && groupNames.length > 0 ? (
+          <div className="mt-3 rounded-lg border border-emerald-100 bg-white/80 px-3 py-2 text-sm">
+            <p className="font-semibold text-stone-800">
+              {activeHoleReceivers.length > 0
+                ? `Stroke on this hole: ${activeHoleReceivers.join(", ")}`
+                : "No strokes on this hole"}
+            </p>
+            {activePlayer.playerName.trim() && activeRelativeHcp > 0 ? (
+              <p className="mt-0.5 text-xs text-stone-600">
+                You: {lookupPlayerHandicap(activePlayer.playerName, playerHandicaps)} hcp ·{" "}
+                {activeRelativeHcp} vs low {lowestHcp}
+                {activeStrokesReceived > 0 ? " · receiving here" : ""}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="mt-4 flex items-center justify-center gap-3">
           <button
@@ -295,10 +417,14 @@ export function ScorecardEntry({
           {activePlayer.holes.map((score, holeIndex) => {
             const isActive = holeIndex === activeHole;
             const par = courseLayout?.holePars[holeIndex] ?? 0;
-            const index = courseLayout?.strokeIndexes[holeIndex] ?? 0;
             const receivesStroke =
-              index > 0 &&
-              handicapStrokesOnHole(playingHandicap, index) > 0;
+              courseLayout &&
+              playersReceivingStrokeOnHole(
+                holeIndex,
+                groupNames,
+                playerHandicaps,
+                courseLayout,
+              ).length > 0;
 
             return (
               <button
@@ -312,11 +438,6 @@ export function ScorecardEntry({
                       ? "bg-emerald-100 text-emerald-900"
                       : "bg-white text-stone-400 ring-1 ring-stone-200"
                 }`}
-                title={
-                  par > 0
-                    ? `Hole ${holeIndex + 1} · Par ${par}${receivesStroke ? " · Stroke hole" : ""}`
-                    : `Hole ${holeIndex + 1}`
-                }
               >
                 <span className="block text-[9px] font-medium opacity-80">
                   {holeIndex + 1}

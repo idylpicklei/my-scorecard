@@ -4,7 +4,15 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { CourseSetupForm } from "@/app/course-setup-form";
 import { DashboardOverview } from "@/app/dashboard-overview";
 import { ScorecardEntry } from "@/app/scorecard-entry";
+import { ScoreboardPanel } from "@/app/scoreboard-panel";
 import { ScorecardsPanel, type SavedScorecard } from "@/app/scorecards-panel";
+import { scorecardToRows } from "@/lib/scorecard-rows";
+import {
+  findUpNext,
+  formatScheduleDate,
+  isRoundScored,
+  resolveScorecardRoundFromSchedule,
+} from "@/lib/schedule-utils";
 import type { GolfCourseLayout } from "@/lib/golf-course";
 import { TRIP_PLAYERS } from "@/lib/trip-roster";
 
@@ -68,28 +76,6 @@ function emptyScoreRows(): ScoreRow[] {
     front9: 0,
     back9: 0,
   }));
-}
-
-function scorecardToRows(scorecard: SavedScorecard): ScoreRow[] {
-  const rowByPlayer = new Map<string, ScoreRow>();
-
-  for (const entry of scorecard.players) {
-    const front9 = entry.holes.slice(0, 9).reduce((sum, score) => sum + score, 0);
-    const back9 = entry.holes.slice(9, 18).reduce((sum, score) => sum + score, 0);
-    rowByPlayer.set(entry.playerName.trim().toLowerCase(), {
-      player: entry.playerName.trim(),
-      front9,
-      back9,
-    });
-  }
-
-  return TRIP_PLAYERS.map((player) => {
-    const match = rowByPlayer.get(player.toLowerCase());
-    if (!match) {
-      return { player, front9: 0, back9: 0 };
-    }
-    return { player, front9: match.front9, back9: match.back9 };
-  });
 }
 
 function defaultScorecardPlayers() {
@@ -185,7 +171,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
   });
   const [endWeekendDate, setEndWeekendDate] = useState("");
 
-  async function loadDashboard() {
+  async function loadDashboard(): Promise<DashboardResponse | null> {
     setIsLoading(true);
     setError(null);
 
@@ -193,7 +179,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
     if (!response.ok) {
       setError("Unable to load weekend dashboard data.");
       setIsLoading(false);
-      return;
+      return null;
     }
 
     const payload = (await response.json()) as DashboardResponse;
@@ -215,6 +201,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
     }
 
     setIsLoading(false);
+    return payload;
   }
 
   useEffect(() => {
@@ -229,6 +216,48 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
     return golfCourses.find((course) => course.id === scorecardForm.courseId) ?? null;
   }, [golfCourses, scorecardForm.courseId]);
 
+  const nextRoundForEntry = useMemo(
+    () => findUpNext(schedule, savedScorecards),
+    [schedule, savedScorecards],
+  );
+
+  const uploadRoundLabel = useMemo(() => {
+    if (!nextRoundForEntry || nextRoundForEntry.kind !== "round") {
+      return null;
+    }
+    const matchesNext =
+      scorecardForm.date === nextRoundForEntry.date &&
+      scorecardForm.course.trim().toLowerCase() ===
+        nextRoundForEntry.course.trim().toLowerCase();
+    if (!matchesNext) {
+      return null;
+    }
+    return `Next round: ${nextRoundForEntry.title} · ${nextRoundForEntry.course} · ${formatScheduleDate(nextRoundForEntry.date)}`;
+  }, [nextRoundForEntry, scorecardForm.course, scorecardForm.date]);
+
+  useEffect(() => {
+    if (userRole !== "admin" || activeTab !== "upload") {
+      return;
+    }
+    if (!nextRoundForEntry || nextRoundForEntry.kind !== "round") {
+      return;
+    }
+    const resolved = resolveScorecardRoundFromSchedule(nextRoundForEntry, golfCourses);
+    if (!resolved?.courseId) {
+      return;
+    }
+
+    setScorecardForm((previous) => {
+      if (
+        previous.courseId &&
+        !isRoundScored(previous.date, previous.course, savedScorecards)
+      ) {
+        return previous;
+      }
+      return resolved;
+    });
+  }, [activeTab, userRole, nextRoundForEntry, golfCourses, savedScorecards]);
+
   const tabs = useMemo(
     () =>
       TABS.map((tab) =>
@@ -242,41 +271,6 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
       ),
     [userRole],
   );
-
-  const leaderboard = useMemo(() => {
-    return [...scoreRows]
-      .map((entry) => ({
-        ...entry,
-        total: entry.front9 + entry.back9,
-        hasScores: entry.front9 > 0 || entry.back9 > 0,
-      }))
-      .sort((a, b) => {
-        if (a.hasScores && !b.hasScores) return -1;
-        if (!a.hasScores && b.hasScores) return 1;
-        if (!a.hasScores && !b.hasScores) {
-          return TRIP_PLAYERS.indexOf(a.player as (typeof TRIP_PLAYERS)[number])
-            - TRIP_PLAYERS.indexOf(b.player as (typeof TRIP_PLAYERS)[number]);
-        }
-        return a.total - b.total;
-      });
-  }, [scoreRows]);
-
-  const teamScores = useMemo(() => {
-    const scoreByPlayer = new Map(
-      leaderboard.map((entry) => [entry.player, entry.total]),
-    );
-
-    return teams.map((team) => {
-      const total = team.players.reduce((sum, player) => {
-        return sum + (scoreByPlayer.get(player) ?? 0);
-      }, 0);
-
-      return {
-        ...team,
-        total,
-      };
-    });
-  }, [leaderboard, teams]);
 
   async function handleTeamSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -386,10 +380,25 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
     const payload = (await response.json()) as { scorecard: SavedScorecard };
     setScoreRows(scorecardToRows(payload.scorecard));
 
-    setScorecardForm({ courseId: "", course: "", date: "" });
     setScorecardPlayers(defaultScorecardPlayers());
     setIsSavingScorecard(false);
-    await loadDashboard();
+    const refreshed = await loadDashboard();
+    const next =
+      refreshed &&
+      findUpNext(refreshed.schedule, refreshed.scorecards ?? []);
+    if (next?.kind === "round") {
+      const resolved = resolveScorecardRoundFromSchedule(
+        next,
+        refreshed?.courses ?? golfCourses,
+      );
+      if (resolved?.courseId) {
+        setScorecardForm(resolved);
+      } else {
+        setScorecardForm({ courseId: "", course: "", date: "" });
+      }
+    } else {
+      setScorecardForm({ courseId: "", course: "", date: "" });
+    }
   }
 
   async function handleEndWeekend() {
@@ -521,6 +530,8 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
             teams={teams}
             scoreRows={scoreRows}
             handicapsByPlayer={handicapsByPlayer}
+            schedule={schedule}
+            scorecards={savedScorecards}
           />
         ) : null}
 
@@ -528,62 +539,20 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
           <section>
             <h2 className="text-lg font-bold text-stone-900">Score Board</h2>
             <p className="mt-1 hidden text-sm text-stone-600 sm:block">
-              Current round leaderboard for your foursome.
+              Gross and net totals by round. Pick a round from the dropdown.
             </p>
-            <div className="mt-4 overflow-x-auto">
-              <table className="min-w-full border-separate border-spacing-y-2 text-sm">
-                <thead>
-                  <tr className="text-left text-stone-500">
-                    <th className="px-3 py-2">Player</th>
-                    <th className="px-3 py-2">Front 9</th>
-                    <th className="px-3 py-2">Back 9</th>
-                    <th className="px-3 py-2">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {leaderboard.map((row, index) => {
-                    const showLeader =
-                      row.hasScores && index === 0 && leaderboard.some((entry) => entry.hasScores);
 
-                    return (
-                      <tr key={row.player} className="rounded-xl bg-stone-50 text-stone-800">
-                        <td className="px-3 py-3 font-semibold">
-                          {showLeader ? "Leader - " : ""}
-                          {row.player}
-                        </td>
-                        <td className="px-3 py-3">{row.hasScores ? row.front9 : "—"}</td>
-                        <td className="px-3 py-3">{row.hasScores ? row.back9 : "—"}</td>
-                        <td className="px-3 py-3 font-bold">{row.hasScores ? row.total : "—"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <ScoreboardPanel
+              schedule={schedule}
+              scorecards={savedScorecards}
+              teams={teams}
+              handicapsByPlayer={handicapsByPlayer}
+              currentUser={currentUser}
+            />
 
-            <div className="mt-6 border-t border-stone-200 pt-4 sm:rounded-xl sm:border sm:bg-stone-50 sm:p-4">
-              <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-stone-700">
-                Teams
-              </h3>
-              <div className="mt-3 divide-y divide-stone-200 sm:grid sm:grid-cols-2 sm:gap-3 sm:divide-none">
-                {teamScores.map((team) => (
-                  <article
-                    key={team.name}
-                    className="border-b border-stone-200 py-3 last:border-b-0 sm:rounded-xl sm:border sm:bg-white sm:p-4"
-                  >
-                    <p className="text-sm font-bold text-stone-900">{team.name}</p>
-                    <p className="mt-1 text-sm text-stone-600">
-                      Players: {team.players.join(", ")}
-                    </p>
-                    <p className="mt-2 text-sm font-semibold text-emerald-800">
-                      Team Total: {team.total}
-                    </p>
-                  </article>
-                ))}
-              </div>
-
-              {userRole === "admin" ? (
-                <form className="mt-5 space-y-4" onSubmit={handleTeamSave}>
+            {userRole === "admin" ? (
+              <div className="mt-6 border-t border-stone-200 pt-4">
+                <form className="space-y-4" onSubmit={handleTeamSave}>
                   <h4 className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-600">
                     Admin team editor
                   </h4>
@@ -620,8 +589,8 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                     {isSavingTeams ? "Saving teams..." : "Save Teams"}
                   </button>
                 </form>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
           </section>
         ) : null}
 
@@ -914,6 +883,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                     : null
                 }
                 playerHandicaps={handicapsByPlayer}
+                roundLabel={uploadRoundLabel ?? undefined}
               />
 
               <div className="flex gap-2">

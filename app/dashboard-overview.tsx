@@ -1,6 +1,13 @@
 "use client";
 
+import { useMemo } from "react";
 import { buildTripOverview, formatPosition } from "@/lib/scoring";
+import {
+  findUpNext,
+  formatScheduleDate,
+  scorecardMatchKey,
+  type ScheduleItemLike,
+} from "@/lib/schedule-utils";
 import { TRIP_PLAYERS } from "@/lib/trip-roster";
 
 type Team = {
@@ -20,6 +27,8 @@ type DashboardOverviewProps = {
   teams: Team[];
   scoreRows: ScoreRow[];
   handicapsByPlayer: Record<string, number>;
+  schedule: ScheduleItemLike[];
+  scorecards: Array<{ date: string; course: string }>;
 };
 
 export function DashboardOverview({
@@ -27,6 +36,8 @@ export function DashboardOverview({
   teams,
   scoreRows,
   handicapsByPlayer,
+  schedule,
+  scorecards,
 }: DashboardOverviewProps) {
   const overview = buildTripOverview({
     scoreRows,
@@ -38,6 +49,17 @@ export function DashboardOverview({
   const { currentPlayer, teamStandings, playerStandings } = overview;
   const scoredPlayers = playerStandings.filter((entry) => entry.hasScores);
 
+  const upNext = useMemo(
+    () => findUpNext(schedule, scorecards),
+    [schedule, scorecards],
+  );
+
+  const upNextHasScores = upNext
+    ? scorecards.some(
+        (entry) => scorecardMatchKey(entry.date, entry.course) === scorecardMatchKey(upNext.date, upNext.course),
+      )
+    : false;
+
   return (
     <section>
       <h2 className="text-lg font-bold text-stone-900">Weekend overview</h2>
@@ -45,6 +67,23 @@ export function DashboardOverview({
         Net scores use each player&apos;s handicap subtracted from their gross 18-hole total for
         the active weekend.
       </p>
+
+      {upNext ? (
+        <article className="mt-4 rounded-xl border border-sky-200 bg-gradient-to-br from-sky-50 to-white p-4 sm:p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-800">
+            Up next
+          </p>
+          <h3 className="mt-2 text-xl font-black text-stone-900">{upNext.title}</h3>
+          <p className="mt-1 text-sm font-semibold text-stone-800">{upNext.course}</p>
+          <p className="mt-1 text-sm text-stone-600">{formatScheduleDate(upNext.date)}</p>
+          {upNext.notes ? (
+            <p className="mt-2 text-sm text-stone-600">{upNext.notes}</p>
+          ) : null}
+          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+            {upNextHasScores ? "Scores posted" : "On the schedule"}
+          </p>
+        </article>
+      ) : null}
 
       <article className="mt-4 border-t border-emerald-200/80 pt-4 sm:mt-5 sm:rounded-2xl sm:border sm:border-emerald-200 sm:bg-gradient-to-br sm:from-emerald-50 sm:to-white sm:p-6">
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-emerald-800">
