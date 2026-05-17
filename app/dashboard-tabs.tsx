@@ -539,13 +539,14 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
           <section>
             <h2 className="text-lg font-bold text-stone-900">Score Board</h2>
             <p className="mt-1 hidden text-sm text-stone-600 sm:block">
-              Gross and net totals by round. Pick a round from the dropdown.
+              Upcoming round stroke holes at the top; gross and net totals by round below.
             </p>
 
             <ScoreboardPanel
               schedule={schedule}
               scorecards={savedScorecards}
               teams={teams}
+              golfCourses={golfCourses}
               handicapsByPlayer={handicapsByPlayer}
               currentUser={currentUser}
             />
@@ -901,9 +902,16 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
               <>
                 <h2 className="text-lg font-bold text-stone-900">Scorecards</h2>
                 <p className="mt-1 hidden text-sm text-stone-600 sm:block">
-                  Expand a course to see each round, then a player to view every stroke.
+                  See stroke holes for the upcoming round, then expand posted rounds for hole-by-hole
+                  scores.
                 </p>
-                <ScorecardsPanel scorecards={savedScorecards} />
+                <ScorecardsPanel
+                  scorecards={savedScorecards}
+                  schedule={schedule}
+                  golfCourses={golfCourses}
+                  handicapsByPlayer={handicapsByPlayer}
+                  currentUser={currentUser}
+                />
               </>
             )}
           </section>

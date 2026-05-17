@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { buildCumulativeTripOverview, buildTripOverview } from "@/lib/scoring";
 import { scorecardToRows, type SavedScorecardLike } from "@/lib/scorecard-rows";
+import { NextRoundStrokePreview } from "@/app/next-round-stroke-preview";
+import type { GolfCourseLayout } from "@/lib/golf-course";
 import { formatScheduleDate, type ScheduleItemLike } from "@/lib/schedule-utils";
 
 type Team = {
@@ -15,6 +17,7 @@ type ScoreboardPanelProps = {
   schedule: ScheduleItemLike[];
   scorecards: SavedScorecardLike[];
   teams: Team[];
+  golfCourses: GolfCourseLayout[];
   handicapsByPlayer: Record<string, number>;
   currentUser: { name: string; username: string };
 };
@@ -32,6 +35,7 @@ export function ScoreboardPanel({
   schedule,
   scorecards,
   teams,
+  golfCourses,
   handicapsByPlayer,
   currentUser,
 }: ScoreboardPanelProps) {
@@ -102,14 +106,31 @@ export function ScoreboardPanel({
 
   if (roundOptions.length === 0) {
     return (
-      <p className="mt-4 text-sm text-stone-600">
-        Add golf rounds to the schedule to see scoreboard totals here.
-      </p>
+      <div className="mt-4 space-y-4">
+        <NextRoundStrokePreview
+          schedule={schedule}
+          scorecards={scorecards}
+          golfCourses={golfCourses}
+          handicapsByPlayer={handicapsByPlayer}
+          currentUser={currentUser}
+        />
+        <p className="text-sm text-stone-600">
+          Add golf rounds to the schedule to see scoreboard totals here.
+        </p>
+      </div>
     );
   }
 
   return (
     <div className="mt-4 space-y-4">
+      <NextRoundStrokePreview
+        schedule={schedule}
+        scorecards={scorecards}
+        golfCourses={golfCourses}
+        handicapsByPlayer={handicapsByPlayer}
+        currentUser={currentUser}
+      />
+
       <div>
         <label
           htmlFor="scoreboard-round"

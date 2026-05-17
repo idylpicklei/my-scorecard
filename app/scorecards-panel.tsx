@@ -1,6 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
+import { NextRoundStrokePreview } from "@/app/next-round-stroke-preview";
+import type { GolfCourseLayout } from "@/lib/golf-course";
+import type { ScheduleItemLike } from "@/lib/schedule-utils";
 
 export type ScorecardPlayer = {
   playerName: string;
@@ -33,9 +36,19 @@ function formatDate(date: string) {
 
 type ScorecardsPanelProps = {
   scorecards: SavedScorecard[];
+  schedule: ScheduleItemLike[];
+  golfCourses: GolfCourseLayout[];
+  handicapsByPlayer: Record<string, number>;
+  currentUser: { name: string; username: string };
 };
 
-export function ScorecardsPanel({ scorecards }: ScorecardsPanelProps) {
+export function ScorecardsPanel({
+  scorecards,
+  schedule,
+  golfCourses,
+  handicapsByPlayer,
+  currentUser,
+}: ScorecardsPanelProps) {
   const byCourse = useMemo(() => {
     const map = new Map<string, SavedScorecard[]>();
 
@@ -62,16 +75,22 @@ export function ScorecardsPanel({ scorecards }: ScorecardsPanelProps) {
       }));
   }, [scorecards]);
 
-  if (scorecards.length === 0) {
-    return (
-      <p className="mt-4 text-sm text-stone-600">
-        No scorecards posted for this weekend yet. Check back after the first round is entered.
-      </p>
-    );
-  }
-
   return (
-    <div className="mt-4 space-y-2">
+    <div className="mt-4 space-y-6">
+      <NextRoundStrokePreview
+        schedule={schedule}
+        scorecards={scorecards}
+        golfCourses={golfCourses}
+        handicapsByPlayer={handicapsByPlayer}
+        currentUser={currentUser}
+      />
+
+      {scorecards.length === 0 ? (
+        <p className="text-sm text-stone-600">
+          No completed scorecards yet. After the round, hole-by-hole scores will appear below.
+        </p>
+      ) : (
+    <div className="space-y-2">
       {byCourse.map(({ course, rounds }) => (
         <details
           key={course}
@@ -150,6 +169,8 @@ export function ScorecardsPanel({ scorecards }: ScorecardsPanelProps) {
           </div>
         </details>
       ))}
+    </div>
+      )}
     </div>
   );
 }

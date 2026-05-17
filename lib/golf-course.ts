@@ -92,6 +92,76 @@ export function relativePlayingHandicap(
   return Math.max(0, Math.round(playerHcp - lowest));
 }
 
+export type HoleStrokePlanEntry = {
+  holeIndex: number;
+  par: number;
+  strokeIndex: number;
+  receivers: string[];
+};
+
+export function playersReceivingStrokeOnHole(
+  holeIndex: number,
+  playerNames: string[],
+  handicaps: Record<string, number>,
+  courseLayout: CourseLayout,
+): string[] {
+  const strokeIndex = courseLayout.strokeIndexes[holeIndex];
+  if (strokeIndex < 1) {
+    return [];
+  }
+
+  return playerNames.filter((name) => {
+    const relative = relativePlayingHandicap(name, playerNames, handicaps);
+    return handicapStrokesOnHole(relative, strokeIndex) > 0;
+  });
+}
+
+export function buildHoleStrokePlan(
+  courseLayout: CourseLayout,
+  playerNames: string[],
+  handicaps: Record<string, number>,
+): HoleStrokePlanEntry[] {
+  return Array.from({ length: 18 }, (_, holeIndex) => ({
+    holeIndex,
+    par: courseLayout.holePars[holeIndex] ?? 0,
+    strokeIndex: courseLayout.strokeIndexes[holeIndex] ?? 0,
+    receivers: playersReceivingStrokeOnHole(
+      holeIndex,
+      playerNames,
+      handicaps,
+      courseLayout,
+    ),
+  }));
+}
+
+/** Per-hole stroke count (0, 1, or 2) for one player in a group. */
+export function strokeAllocationForPlayer(
+  playerName: string,
+  groupNames: string[],
+  handicaps: Record<string, number>,
+  courseLayout: CourseLayout,
+): number[] {
+  const relative = relativePlayingHandicap(playerName, groupNames, handicaps);
+  return courseLayout.strokeIndexes.map((strokeIndex) =>
+    handicapStrokesOnHole(relative, strokeIndex),
+  );
+}
+
+export function resolveRosterPlayerName(
+  currentUser: { name: string; username: string },
+  roster: string[],
+): string | null {
+  const candidates = [currentUser.name, currentUser.username];
+  for (const player of roster) {
+    if (
+      candidates.some((value) => value.trim().toLowerCase() === player.trim().toLowerCase())
+    ) {
+      return player;
+    }
+  }
+  return null;
+}
+
 /** Strokes received on a hole for a playing handicap (stroke index 1 = hardest). */
 export function handicapStrokesOnHole(playingHandicap: number, strokeIndex: number) {
   if (playingHandicap <= 0 || strokeIndex < 1 || strokeIndex > 18) {

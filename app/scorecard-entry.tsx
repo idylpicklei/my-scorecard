@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  buildHoleStrokePlan,
   handicapStrokesOnHole,
   lookupPlayerHandicap,
   lowestHandicapInGroup,
+  playersReceivingStrokeOnHole,
   relativePlayingHandicap,
   scoreToPar,
   type CourseLayout,
@@ -45,23 +47,6 @@ function groupPlayerNames(players: ScorecardEntryPlayer[]) {
   return named.length > 0 ? named : [];
 }
 
-function playersReceivingStrokeOnHole(
-  holeIndex: number,
-  playerNames: string[],
-  handicaps: Record<string, number>,
-  courseLayout: CourseLayout,
-) {
-  const strokeIndex = courseLayout.strokeIndexes[holeIndex];
-  if (strokeIndex < 1) {
-    return [];
-  }
-
-  return playerNames.filter((name) => {
-    const relative = relativePlayingHandicap(name, playerNames, handicaps);
-    return handicapStrokesOnHole(relative, strokeIndex) > 0;
-  });
-}
-
 export function ScorecardEntry({
   players,
   onChange,
@@ -84,18 +69,7 @@ export function ScorecardEntry({
     if (!courseLayout) {
       return [];
     }
-
-    return Array.from({ length: 18 }, (_, holeIndex) => ({
-      holeIndex,
-      par: courseLayout.holePars[holeIndex] ?? 0,
-      strokeIndex: courseLayout.strokeIndexes[holeIndex] ?? 0,
-      receivers: playersReceivingStrokeOnHole(
-        holeIndex,
-        groupNames,
-        playerHandicaps,
-        courseLayout,
-      ),
-    }));
+    return buildHoleStrokePlan(courseLayout, groupNames, playerHandicaps);
   }, [courseLayout, groupNames, playerHandicaps]);
 
   useEffect(() => {
