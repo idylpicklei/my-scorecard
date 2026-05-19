@@ -1,14 +1,26 @@
+import {
+  handicapStrokesOnHole,
+  relativePlayingHandicap,
+  type CourseLayout,
+} from "@/lib/golf-course";
 import { resolveNameToRosterName } from "@/lib/trip-roster";
 import { TRIP_PLAYERS } from "@/lib/trip-roster";
 
 export const SKINS_POT_DOLLARS = 40;
+
+export type SkinsHoleScore = {
+  player: string;
+  gross: number;
+  strokes: number;
+  net: number;
+};
 
 export type SkinsHoleResult = {
   hole: number;
   winner: string | null;
   tied: boolean;
   incomplete: boolean;
-  scores: Array<{ player: string; score: number }>;
+  scores: SkinsHoleScore[];
 };
 
 export type SkinsPlayerResult = {
@@ -25,6 +37,8 @@ export type SkinsRoundResult = {
   totalSkins: number;
   potDollars: number;
 };
+
+export type SkinsCalculationResult = SkinsRoundResult | "incomplete" | "no-course";
 
 type ScorecardPlayerInput = {
   playerName: string;
@@ -54,12 +68,37 @@ export function scorecardToRosterHoles(
   return map;
 }
 
+function netScoreOnHole(
+  gross: number,
+  player: string,
+  holeIndex: number,
+  handicapsByPlayer: Record<string, number>,
+  courseLayout: CourseLayout,
+): { strokes: number; net: number } {
+  const strokeIndex = courseLayout.strokeIndexes[holeIndex] ?? 0;
+  const playingHcp = relativePlayingHandicap(player, [...TRIP_PLAYERS], handicapsByPlayer);
+  const strokes = handicapStrokesOnHole(playingHcp, strokeIndex);
+  return { strokes, net: gross - strokes };
+}
+
 export function calculateSkinsForRound(
   players: ScorecardPlayerInput[],
-  options?: { potDollars?: number; random?: () => number },
-): SkinsRoundResult | null {
+  options?: {
+    potDollars?: number;
+    random?: () => number;
+    handicapsByPlayer: Record<string, number>;
+    courseLayout: CourseLayout | null;
+  },
+): SkinsCalculationResult {
   const potDollars = options?.potDollars ?? SKINS_POT_DOLLARS;
   const random = options?.random ?? Math.random;
+  const handicapsByPlayer = options?.handicapsByPlayer ?? {};
+  const courseLayout = options?.courseLayout ?? null;
+
+  if (!courseLayout || !courseLayout.strokeIndexes.some((index) => index > 0)) {
+    return "no-course";
+  }
+
   const holesByPlayer = scorecardToRosterHoles(players);
 
   const hasFullRound = TRIP_PLAYERS.every((player) => {
@@ -68,7 +107,7 @@ export function calculateSkinsForRound(
   });
 
   if (!hasFullRound) {
-    return null;
+    return "incomplete";
   }
 
   const skinsByPlayer: Record<string, number> = Object.fromEntries(
@@ -77,13 +116,20 @@ export function calculateSkinsForRound(
   const holeResults: SkinsHoleResult[] = [];
 
   for (let holeIndex = 0; holeIndex < 18; holeIndex += 1) {
-    const scores = TRIP_PLAYERS.map((player) => ({
-      player,
-      score: holesByPlayer.get(player)![holeIndex],
-    }));
+    const scores: SkinsHoleScore[] = TRIP_PLAYERS.map((player) => {
+      const gross = holesByPlayer.get(player)![holeIndex];
+      const { strokes, net } = netScoreOnHole(
+        gross,
+        player,
+        holeIndex,
+        handicapsByPlayer,
+        courseLayout,
+      );
+      return { player, gross, strokes, net };
+    });
 
-    const minScore = Math.min(...scores.map((entry) => entry.score));
-    const leaders = scores.filter((entry) => entry.score === minScore);
+    const minNet = Math.min(...scores.map((entry) => entry.net));
+    const leaders = scores.filter((entry) => entry.net === minNet);
 
     let winner: string | null = null;
     const tied = leaders.length > 1;
@@ -179,4 +225,11 @@ function splitEvenPot(
 
 export function formatSkinsPayout(amount: number) {
   return amount === 0 ? "$0" : `$${amount}`;
+}
+
+export function formatSkinsHoleScore(entry: SkinsHoleScore) {
+  if (entry.strokes === 0) {
+    return String(entry.net);
+  }
+  return `${entry.net} (${entry.gross}−${entry.strokes})`;
 }

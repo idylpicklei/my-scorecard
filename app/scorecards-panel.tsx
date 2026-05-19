@@ -13,6 +13,7 @@ export type ScorecardPlayer = {
 export type SavedScorecard = {
   id: string;
   course: string;
+  courseId?: string;
   date: string;
   players: ScorecardPlayer[];
   createdAt: string;

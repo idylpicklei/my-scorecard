@@ -14,6 +14,7 @@ export type ScorecardPlayer = {
 export type SavedScorecardLike = {
   id: string;
   course: string;
+  courseId?: string;
   date: string;
   players: ScorecardPlayer[];
 };

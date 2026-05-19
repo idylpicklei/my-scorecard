@@ -90,15 +90,15 @@ function defaultScorecardPlayers() {
 
 const GAMES = [
   {
-    name: "Nassau",
-    details: "Front 9, Back 9, and Overall bets",
-    status: "Queued",
+    name: "Skin Game",
+    details: "Lowest score wins the skin",
+    status: "Active",
   },
   {
-    name: "Closest to Pin",
-    details: "Par 3 side game for all players",
-    status: "Completed",
-  },
+    name: "More Games coming soon...",
+    details: "More games coming soon...",
+    status: "Coming Soon",
+  }
 ];
 
 type WeekendSummary = {
@@ -1054,7 +1054,12 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
               Active and recent side games for this weekend.
             </p>
 
-            <SkinsGamePanel schedule={schedule} scorecards={savedScorecards} />
+            <SkinsGamePanel
+              schedule={schedule}
+              scorecards={savedScorecards}
+              golfCourses={golfCourses}
+              handicapsByPlayer={handicapsByPlayer}
+            />
 
             <div className="mt-8 space-y-3">
               <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-stone-600">

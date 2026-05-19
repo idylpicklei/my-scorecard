@@ -3,10 +3,12 @@
 import { useMemo, useState } from "react";
 import {
   calculateSkinsForRound,
+  formatSkinsHoleScore,
   formatSkinsPayout,
   SKINS_POT_DOLLARS,
-  type SkinsRoundResult,
+  type SkinsCalculationResult,
 } from "@/lib/skins";
+import type { GolfCourseLayout } from "@/lib/golf-course";
 import { TRIP_PLAYER_ALIASES } from "@/lib/trip-roster";
 import { formatScheduleDate, type ScheduleItemLike } from "@/lib/schedule-utils";
 import type { SavedScorecardLike } from "@/lib/scorecard-rows";
@@ -21,7 +23,32 @@ type RoundOption = {
 type SkinsGamePanelProps = {
   schedule: ScheduleItemLike[];
   scorecards: SavedScorecardLike[];
+  golfCourses: GolfCourseLayout[];
+  handicapsByPlayer: Record<string, number>;
 };
+
+function resolveCourseLayout(
+  scorecard: SavedScorecardLike,
+  golfCourses: GolfCourseLayout[],
+) {
+  const course =
+    (scorecard.courseId
+      ? golfCourses.find((entry) => entry.id === scorecard.courseId)
+      : null) ??
+    golfCourses.find(
+      (entry) =>
+        entry.name.trim().toLowerCase() === scorecard.course.trim().toLowerCase(),
+    );
+
+  if (!course) {
+    return null;
+  }
+
+  return {
+    holePars: course.holePars,
+    strokeIndexes: course.strokeIndexes,
+  };
+}
 
 function displayPlayerName(rosterName: string) {
   const aliases = TRIP_PLAYER_ALIASES[rosterName];
@@ -31,7 +58,12 @@ function displayPlayerName(rosterName: string) {
   return rosterName;
 }
 
-export function SkinsGamePanel({ schedule, scorecards }: SkinsGamePanelProps) {
+export function SkinsGamePanel({
+  schedule,
+  scorecards,
+  golfCourses,
+  handicapsByPlayer,
+}: SkinsGamePanelProps) {
   const roundOptions = useMemo((): RoundOption[] => {
     return schedule
       .filter((item) => item.kind === "round")
@@ -65,14 +97,16 @@ export function SkinsGamePanel({ schedule, scorecards }: SkinsGamePanelProps) {
 
   const activeOption = roundOptions.find((option) => option.id === activeRoundId);
 
-  const skinsResult = useMemo((): SkinsRoundResult | null | "incomplete" => {
+  const skinsResult = useMemo((): SkinsCalculationResult | null => {
     void payoutSeed;
     if (!activeOption?.scorecard) {
       return null;
     }
-    const result = calculateSkinsForRound(activeOption.scorecard.players);
-    return result ?? "incomplete";
-  }, [activeOption, payoutSeed]);
+    return calculateSkinsForRound(activeOption.scorecard.players, {
+      handicapsByPlayer,
+      courseLayout: resolveCourseLayout(activeOption.scorecard, golfCourses),
+    });
+  }, [activeOption, payoutSeed, handicapsByPlayer, golfCourses]);
 
   function reshufflePayout() {
     setPayoutSeed((value) => value + 1);
@@ -148,8 +182,8 @@ export function SkinsGamePanel({ schedule, scorecards }: SkinsGamePanelProps) {
       </div>
 
       <p className="text-sm text-stone-600">
-        One skin per hole when a player has the only low gross score (beats the other three).
-        Ties award no skin. ${SKINS_POT_DOLLARS} pot split by skins won (whole dollars).
+        The one and only skins game!  Lowest score wins the skin. A ${SKINS_POT_DOLLARS} pot is split by skins won
+        (whole dollars). Randomly spread out extra dollars to make the pot equal to the pot dollars.
       </p>
 
       {!activeOption?.scorecard ? (
@@ -159,6 +193,11 @@ export function SkinsGamePanel({ schedule, scorecards }: SkinsGamePanelProps) {
       ) : skinsResult === "incomplete" ? (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           All four players need 18 hole scores on the scorecard to calculate skins.
+        </p>
+      ) : skinsResult === "no-course" ? (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Link this round to a course with handicap ranks (1–18) in the course library so net
+          strokes can be calculated.
         </p>
       ) : skinsResult ? (
         <>
@@ -214,7 +253,7 @@ export function SkinsGamePanel({ schedule, scorecards }: SkinsGamePanelProps) {
                   <tr>
                     <th className="px-2 py-1.5">Hole</th>
                     <th className="px-2 py-1.5">Skin</th>
-                    <th className="px-2 py-1.5">Scores</th>
+                    <th className="px-2 py-1.5">Net (gross−strokes)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -225,7 +264,7 @@ export function SkinsGamePanel({ schedule, scorecards }: SkinsGamePanelProps) {
                         {hole.winner ? displayPlayerName(hole.winner) : hole.tied ? "Tie" : "—"}
                       </td>
                       <td className="px-2 py-1.5 text-stone-600">
-                        {hole.scores.map((entry) => `${entry.score}`).join(" · ")}
+                        {hole.scores.map((entry) => formatSkinsHoleScore(entry)).join(" · ")}
                       </td>
                     </tr>
                   ))}
