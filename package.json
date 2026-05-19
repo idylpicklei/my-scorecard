@@ -21,6 +21,7 @@
     "db:add-golf-courses": "tsx scripts/apply-golf-courses-migration.ts"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",
     "dotenv": "^17.4.2",

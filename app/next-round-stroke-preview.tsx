@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   buildHoleStrokePlan,
   lookupPlayerHandicap,
@@ -15,6 +15,7 @@ import {
   findUpNext,
   formatScheduleDate,
   isRoundScored,
+  listScheduledRounds,
   resolveScorecardRoundFromSchedule,
   type ScheduleItemLike,
 } from "@/lib/schedule-utils";
@@ -32,6 +33,16 @@ type NextRoundStrokePreviewProps = {
   handicapsByPlayer: Record<string, number>;
   currentUser: { name: string; username: string };
   groupPlayers?: string[];
+};
+
+type RoundOption = {
+  id: string;
+  title: string;
+  course: string;
+  dateLabel: string;
+  selectLabel: string;
+  scored: boolean;
+  round: ScheduleItemLike & { courseId?: string };
 };
 
 function HoleGrid({
@@ -101,6 +112,23 @@ function HoleGrid({
   );
 }
 
+function resolveRoundPreview(
+  round: ScheduleItemLike & { courseId?: string },
+  golfCourses: GolfCourseLayout[],
+) {
+  const resolved = resolveScorecardRoundFromSchedule(round, golfCourses);
+  if (!resolved?.courseId) {
+    return { course: null as null, layout: null as null };
+  }
+
+  const course = golfCourses.find((entry) => entry.id === resolved.courseId) ?? null;
+  const layout: CourseLayout | null = course
+    ? { holePars: course.holePars, strokeIndexes: course.strokeIndexes }
+    : null;
+
+  return { course, layout };
+}
+
 export function NextRoundStrokePreview({
   schedule,
   scorecards,
@@ -109,34 +137,56 @@ export function NextRoundStrokePreview({
   currentUser,
   groupPlayers = TRIP_PLAYERS,
 }: NextRoundStrokePreviewProps) {
+  const roundOptions = useMemo((): RoundOption[] => {
+    return listScheduledRounds(schedule).map((round) => ({
+      id: round.id,
+      title: round.title,
+      course: round.course,
+      dateLabel: formatScheduleDate(round.date),
+      selectLabel: `${round.title} · ${round.course} · ${formatScheduleDate(round.date)}`,
+      scored: isRoundScored(round.date, round.course, scorecards),
+      round,
+    }));
+  }, [schedule, scorecards]);
+
+  const defaultRoundId = useMemo(() => {
+    const next = findUpNext(schedule, scorecards);
+    if (next) {
+      return next.id;
+    }
+    return roundOptions[0]?.id ?? "";
+  }, [schedule, scorecards, roundOptions]);
+
+  const [selectedRoundId, setSelectedRoundId] = useState("");
+
+  useEffect(() => {
+    if (roundOptions.length === 0) {
+      return;
+    }
+    if (!selectedRoundId || !roundOptions.some((option) => option.id === selectedRoundId)) {
+      setSelectedRoundId(defaultRoundId);
+    }
+  }, [defaultRoundId, roundOptions, selectedRoundId]);
+
+  const activeRoundId = roundOptions.some((option) => option.id === selectedRoundId)
+    ? selectedRoundId
+    : defaultRoundId;
+
+  const activeOption = roundOptions.find((option) => option.id === activeRoundId);
+
   const preview = useMemo(() => {
-    const nextRound = findUpNext(schedule, scorecards);
-    if (!nextRound || nextRound.kind !== "round") {
+    if (!activeOption) {
       return null;
     }
-    if (isRoundScored(nextRound.date, nextRound.course, scorecards)) {
-      return null;
-    }
+    const { course, layout } = resolveRoundPreview(activeOption.round, golfCourses);
+    return { round: activeOption.round, course, layout, scored: activeOption.scored };
+  }, [activeOption, golfCourses]);
 
-    const resolved = resolveScorecardRoundFromSchedule(nextRound, golfCourses);
-    if (!resolved?.courseId) {
-      return { round: nextRound, course: null as null, layout: null as null };
-    }
-
-    const course =
-      golfCourses.find((entry) => entry.id === resolved.courseId) ?? null;
-    const layout: CourseLayout | null = course
-      ? { holePars: course.holePars, strokeIndexes: course.strokeIndexes }
-      : null;
-
-    return { round: nextRound, course, layout };
-  }, [schedule, scorecards, golfCourses]);
-
-  if (!preview) {
+  if (roundOptions.length === 0 || !preview || !activeOption) {
     return null;
   }
 
-  const { round, course, layout } = preview;
+  const { round, course, layout, scored } = preview;
   const rosterPlayer = resolveRosterPlayerName(currentUser, groupPlayers);
   const lowestHcp = lowestHandicapInGroup(groupPlayers, handicapsByPlayer);
   const holeStrokePlan =
@@ -161,12 +211,73 @@ export function NextRoundStrokePreview({
   return (
     <section className="rounded-xl border border-sky-200 bg-sky-50/80 p-4">
       <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-800">
-        Upcoming round
+        Strokes by round
       </p>
-      <h3 className="mt-1 text-base font-bold text-stone-900">
+
+      <div className="mt-3 space-y-3">
+        <div
+          className="flex gap-2 overflow-x-auto overscroll-x-contain pb-1 sm:hidden"
+          role="tablist"
+          aria-label="Select round"
+        >
+          {roundOptions.map((option) => {
+            const isActive = option.id === activeRoundId;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setSelectedRoundId(option.id)}
+                className={`shrink-0 rounded-full border px-3 py-2 text-left transition ${
+                  isActive
+                    ? "border-emerald-700 bg-emerald-700 text-white"
+                    : "border-stone-300 bg-white text-stone-800"
+                }`}
+              >
+                <span className="block text-xs font-bold leading-tight">{option.title}</span>
+                <span
+                  className={`mt-0.5 block text-[10px] leading-tight ${
+                    isActive ? "text-emerald-100" : "text-stone-500"
+                  }`}
+                >
+                  {option.dateLabel}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="hidden sm:block">
+          <label
+            htmlFor="stroke-preview-round"
+            className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-600"
+          >
+            Round
+          </label>
+          <select
+            id="stroke-preview-round"
+            value={activeRoundId}
+            onChange={(event) => setSelectedRoundId(event.target.value)}
+            className="mt-2 w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm font-semibold text-stone-900 outline-none focus:border-emerald-700"
+          >
+            {roundOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.selectLabel}
+                {option.scored ? " (scored)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <h3 className="mt-3 text-base font-bold text-stone-900">
         {round.title} · {round.course}
       </h3>
-      <p className="text-sm text-stone-600">{formatScheduleDate(round.date)}</p>
+      <p className="text-sm text-stone-600">
+        {formatScheduleDate(round.date)}
+        {scored ? " · scores posted" : " · upcoming"}
+      </p>
 
       {!course || !layout ? (
         <p className="mt-3 text-sm text-amber-900">
@@ -252,8 +363,7 @@ export function NextRoundStrokePreview({
               {groupPlayers.map((name) => {
                 const hcp = lookupPlayerHandicap(name, handicapsByPlayer);
                 const relative = Math.max(0, Math.round(hcp - lowestHcp));
-                const isYou =
-                  rosterPlayer?.toLowerCase() === name.toLowerCase();
+                const isYou = rosterPlayer?.toLowerCase() === name.toLowerCase();
                 return (
                   <li key={name} className={isYou ? "font-semibold text-emerald-900" : ""}>
                     {name} · {hcp} hcp

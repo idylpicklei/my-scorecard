@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { CourseSetupForm } from "@/app/course-setup-form";
 import { DashboardOverview } from "@/app/dashboard-overview";
 import { ScorecardEntry } from "@/app/scorecard-entry";
+import { ScorecardScanUpload } from "@/app/scorecard-scan-upload";
 import { ScoreboardPanel } from "@/app/scoreboard-panel";
 import { ScorecardsPanel, type SavedScorecard } from "@/app/scorecards-panel";
 import { scorecardToRows } from "@/lib/scorecard-rows";
@@ -14,6 +15,7 @@ import {
   resolveScorecardRoundFromSchedule,
 } from "@/lib/schedule-utils";
 import type { GolfCourseLayout } from "@/lib/golf-course";
+import { mergeScannedIntoEntryPlayers } from "@/lib/scorecard-scan";
 import { TRIP_PLAYERS } from "@/lib/trip-roster";
 
 type DashboardTab =
@@ -820,8 +822,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
               <>
             <h2 className="text-lg font-bold text-stone-900">Upload Scorecard</h2>
             <p className="mt-1 hidden text-sm text-stone-600 sm:block">
-              Tap a score for each hole — it advances automatically. Use player chips to switch
-              foursomes.
+              Scan a photo to fill scores, or tap each hole manually. Review before saving.
             </p>
 
             <form className="mt-6 space-y-6" onSubmit={handleScorecardSubmit}>
@@ -871,6 +872,16 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                   />
                 </div>
               </div>
+
+              <ScorecardScanUpload
+                knownPlayers={TRIP_PLAYERS}
+                disabled={isSavingScorecard}
+                onApply={(scanned) => {
+                  setScorecardPlayers((previous) =>
+                    mergeScannedIntoEntryPlayers(previous, scanned),
+                  );
+                }}
+              />
 
               <ScorecardEntry
                 players={scoreCardPlayers}

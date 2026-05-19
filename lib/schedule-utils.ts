@@ -57,12 +57,8 @@ export function isRoundScored(
   return scorecards.some((entry) => scorecardMatchKey(entry.date, entry.course) === key);
 }
 
-export function findUpNext(
-  schedule: ScheduleItemLike[],
-  scorecards: Array<{ date: string; course: string }>,
-): ScheduleItemLike | null {
-  const today = new Date().toISOString().slice(0, 10);
-  const rounds = schedule
+export function listScheduledRounds(schedule: ScheduleItemLike[]): ScheduleItemLike[] {
+  return schedule
     .filter((item) => item.kind === "round")
     .sort((a, b) => {
       const byDate = a.date.localeCompare(b.date);
@@ -71,6 +67,14 @@ export function findUpNext(
       }
       return a.title.localeCompare(b.title);
     });
+}
+
+export function findUpNext(
+  schedule: ScheduleItemLike[],
+  scorecards: Array<{ date: string; course: string }>,
+): ScheduleItemLike | null {
+  const today = new Date().toISOString().slice(0, 10);
+  const rounds = listScheduledRounds(schedule);
 
   if (rounds.length === 0) {
     return null;
