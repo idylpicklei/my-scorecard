@@ -1,4 +1,8 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import {
+  formatRosterNamesForScorecardScan,
+  resolveNameToRosterName,
+} from "@/lib/trip-roster";
 
 export type ParsedScorecardPlayer = {
   playerName: string;
@@ -33,6 +37,14 @@ export function matchPlayerToRoster(rawName: string, knownPlayers: string[]): st
   const trimmed = rawName.trim();
   if (!trimmed) {
     return trimmed;
+  }
+
+  const fromAlias = resolveNameToRosterName(trimmed);
+  if (fromAlias) {
+    const inRoster = knownPlayers.find(
+      (name) => name.toLowerCase() === fromAlias.toLowerCase(),
+    );
+    return inRoster ?? fromAlias;
   }
 
   const lower = trimmed.toLowerCase();
@@ -112,24 +124,28 @@ export function normalizeGeminiScorecardResponse(
 }
 
 function buildScanPrompt(knownPlayers: string[]) {
-  const roster =
-    knownPlayers.length > 0
-      ? knownPlayers.join(", ")
-      : "any visible player names";
+  const rosterGuide = formatRosterNamesForScorecardScan();
+  const rosterFallback =
+    knownPlayers.length > 0 ? knownPlayers.join(", ") : "any visible player names";
 
   return `You are reading a golf scorecard photo for a weekend trip app.
 
 Extract every player row visible on the scorecard with exactly 18 hole scores (holes 1 through 18).
-Use these trip player names when they match (spelling may differ on the card): ${roster}.
+
+Map each row to exactly one canonical trip player name using this guide (left = name to return in JSON, right = names you may see on the card):
+${rosterGuide}
+
+If a name is not in the guide, use the closest match from: ${rosterFallback}.
 
 Return ONLY valid JSON in this shape (no markdown):
 {
   "players": [
-    { "playerName": "ExactOrBestName", "holes": [4,5,4,3,5,4,4,3,5,4,4,5,4,3,5,4,4,5] }
+    { "playerName": "MinJungKyu", "holes": [4,5,4,3,5,4,4,3,5,4,4,5,4,3,5,4,4,5] }
   ]
 }
 
 Rules:
+- "playerName" MUST be the canonical trip name (e.g. MinJungKyu, not Darren).
 - "holes" must be an array of exactly 18 integers (gross strokes per hole).
 - Use 0 for a hole you cannot read; still return 18 entries.
 - Ignore par/handicap rows; only stroke counts per player.

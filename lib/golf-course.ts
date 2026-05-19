@@ -1,3 +1,5 @@
+import { resolveNameToRosterName } from "@/lib/trip-roster";
+
 export type GolfCourseLayout = {
   id: string;
   name: string;
@@ -53,7 +55,8 @@ export function lookupPlayerHandicap(
   playerName: string,
   handicaps: Record<string, number>,
 ): number {
-  const key = playerName.trim().toLowerCase();
+  const canonical = resolveNameToRosterName(playerName) ?? playerName;
+  const key = canonical.trim().toLowerCase();
   if (!key) {
     return 0;
   }
@@ -152,6 +155,18 @@ export function resolveRosterPlayerName(
   roster: string[],
 ): string | null {
   const candidates = [currentUser.name, currentUser.username];
+  for (const value of candidates) {
+    const fromAlias = resolveNameToRosterName(value);
+    if (fromAlias) {
+      const match = roster.find(
+        (player) => player.toLowerCase() === fromAlias.toLowerCase(),
+      );
+      if (match) {
+        return match;
+      }
+    }
+  }
+
   for (const player of roster) {
     if (
       candidates.some((value) => value.trim().toLowerCase() === player.trim().toLowerCase())

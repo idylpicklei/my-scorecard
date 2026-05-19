@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Photo is required." }, { status: 400 });
   }
 
-  let knownPlayers = TRIP_PLAYERS;
+  let knownPlayers: string[] = [...TRIP_PLAYERS];
   const rosterRaw = formData.get("knownPlayers");
   if (typeof rosterRaw === "string" && rosterRaw.trim()) {
     try {
