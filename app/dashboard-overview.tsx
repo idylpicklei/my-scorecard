@@ -5,7 +5,9 @@ import { buildTripOverview, formatPosition } from "@/lib/scoring";
 import {
   findUpNext,
   formatScheduleDate,
-  scorecardMatchKey,
+  isRoundScored,
+  roundPrimaryLabel,
+  roundSecondaryLabel,
   type ScheduleItemLike,
 } from "@/lib/schedule-utils";
 import { TRIP_PLAYERS } from "@/lib/trip-roster";
@@ -54,11 +56,7 @@ export function DashboardOverview({
     [schedule, scorecards],
   );
 
-  const upNextHasScores = upNext
-    ? scorecards.some(
-        (entry) => scorecardMatchKey(entry.date, entry.course) === scorecardMatchKey(upNext.date, upNext.course),
-      )
-    : false;
+  const upNextHasScores = upNext ? isRoundScored(upNext, scorecards) : false;
 
   return (
     <section>
@@ -73,9 +71,10 @@ export function DashboardOverview({
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-800">
             Up next
           </p>
-          <h3 className="mt-2 text-xl font-black text-stone-900">{upNext.title}</h3>
-          <p className="mt-1 text-sm font-semibold text-stone-800">{upNext.course}</p>
-          <p className="mt-1 text-sm text-stone-600">{formatScheduleDate(upNext.date)}</p>
+          <h3 className="mt-2 text-xl font-black text-stone-900">{roundPrimaryLabel(upNext)}</h3>
+          <p className="mt-1 text-sm text-stone-600">
+            {roundSecondaryLabel(upNext, schedule.filter((item) => item.kind === "round"))}
+          </p>
           {upNext.notes ? (
             <p className="mt-2 text-sm text-stone-600">{upNext.notes}</p>
           ) : null}

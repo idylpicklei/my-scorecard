@@ -10,7 +10,12 @@ import {
 } from "@/lib/skins";
 import type { GolfCourseLayout } from "@/lib/golf-course";
 import { TRIP_PLAYER_ALIASES } from "@/lib/trip-roster";
-import { formatScheduleDate, type ScheduleItemLike } from "@/lib/schedule-utils";
+import {
+  buildScheduledRoundOptions,
+  findScorecardForRound,
+  listScheduledRounds,
+  type ScheduleItemLike,
+} from "@/lib/schedule-utils";
 import type { SavedScorecardLike } from "@/lib/scorecard-rows";
 
 type RoundOption = {
@@ -65,24 +70,12 @@ export function SkinsGamePanel({
   handicapsByPlayer,
 }: SkinsGamePanelProps) {
   const roundOptions = useMemo((): RoundOption[] => {
-    return schedule
-      .filter((item) => item.kind === "round")
-      .sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title))
-      .map((item) => {
-        const scorecard =
-          scorecards.find(
-            (entry) =>
-              entry.date === item.date &&
-              entry.course.trim().toLowerCase() === item.course.trim().toLowerCase(),
-          ) ?? null;
-
-        return {
-          id: scorecard?.id ?? `schedule-${item.id}`,
-          label: `${item.title} · ${item.course}`,
-          dateLabel: formatScheduleDate(item.date),
-          scorecard,
-        };
-      });
+    return buildScheduledRoundOptions(schedule, scorecards).map((item) => ({
+      id: item.id,
+      label: item.label,
+      dateLabel: item.dateLabel,
+      scorecard: findScorecardForRound(scorecards, item.round),
+    }));
   }, [schedule, scorecards]);
 
   const defaultRoundId =
@@ -165,9 +158,7 @@ export function SkinsGamePanel({
                     : "border-stone-300 bg-white text-stone-800"
                 }`}
               >
-                <span className="block text-xs font-bold leading-tight">
-                  {option.label.split(" · ")[0]}
-                </span>
+                <span className="block text-xs font-bold leading-tight">{option.label}</span>
                 <span
                   className={`mt-0.5 block text-[10px] leading-tight ${
                     isActive ? "text-emerald-100" : "text-stone-500"

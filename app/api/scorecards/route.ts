@@ -13,6 +13,7 @@ export const runtime = "nodejs";
 type ScorecardPayload = {
   course?: string;
   courseId?: string;
+  scheduleEntryId?: string;
   date?: string;
   players?: Array<{
     playerName?: string;
@@ -90,9 +91,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const scheduleEntryId = payload?.scheduleEntryId?.trim();
+
   const created = await saveScorecard({
     course,
     courseId: courseId || undefined,
+    scheduleEntryId: scheduleEntryId || undefined,
     date,
     players: normalizedPlayers,
   });

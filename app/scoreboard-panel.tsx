@@ -5,7 +5,12 @@ import { buildCumulativeTripOverview, buildTripOverview } from "@/lib/scoring";
 import { scorecardToRows, type SavedScorecardLike } from "@/lib/scorecard-rows";
 import { NextRoundStrokePreview } from "@/app/next-round-stroke-preview";
 import type { GolfCourseLayout } from "@/lib/golf-course";
-import { formatScheduleDate, type ScheduleItemLike } from "@/lib/schedule-utils";
+import {
+  buildScheduledRoundOptions,
+  findScorecardForRound,
+  listScheduledRounds,
+  type ScheduleItemLike,
+} from "@/lib/schedule-utils";
 
 type Team = {
   id: string;
@@ -40,22 +45,14 @@ export function ScoreboardPanel({
   currentUser,
 }: ScoreboardPanelProps) {
   const roundOptions = useMemo(() => {
-    const options: RoundOption[] = schedule
-      .filter((item) => item.kind === "round")
-      .sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title))
-      .map((item) => {
-        const scorecard = scorecards.find(
-          (entry) =>
-            entry.date === item.date &&
-            entry.course.trim().toLowerCase() === item.course.trim().toLowerCase(),
-        );
-        return {
-          id: scorecard?.id ?? `schedule-${item.id}`,
-          label: `${item.title} · ${item.course}`,
-          dateLabel: formatScheduleDate(item.date),
-          hasScores: Boolean(scorecard),
-        };
-      });
+    const options: RoundOption[] = buildScheduledRoundOptions(schedule, scorecards).map(
+      (item) => ({
+        id: item.id,
+        label: item.label,
+        dateLabel: item.dateLabel,
+        hasScores: item.hasScores,
+      }),
+    );
 
     if (scorecards.length > 1) {
       options.unshift({
@@ -90,7 +87,17 @@ export function ScoreboardPanel({
       });
     }
 
-    const scorecard = scorecards.find((entry) => entry.id === activeRoundId);
+    const scorecard =
+      scorecards.find((entry) => entry.id === activeRoundId) ??
+      (() => {
+        const scheduleId = activeRoundId.startsWith("schedule-")
+          ? activeRoundId.slice("schedule-".length)
+          : null;
+        const round = scheduleId
+          ? listScheduledRounds(schedule).find((item) => item.id === scheduleId)
+          : null;
+        return round ? findScorecardForRound(scorecards, round) : null;
+      })();
     const scoreRows = scorecard ? scorecardToRows(scorecard) : [];
 
     return buildTripOverview({

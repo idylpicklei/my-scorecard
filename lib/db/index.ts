@@ -72,6 +72,7 @@ export type Scorecard = {
   id: string;
   course: string;
   courseId?: string;
+  scheduleEntryId?: string;
   date: string;
   players: PlayerScores[];
   createdAt: string;
@@ -167,6 +168,7 @@ function mapScorecard(row: typeof scorecards.$inferSelect): Scorecard {
     id: row.id,
     course: row.course,
     courseId: row.courseId ?? undefined,
+    scheduleEntryId: row.scheduleEntryId ?? undefined,
     date: row.date,
     players: row.players,
     createdAt: row.createdAt.toISOString(),
@@ -375,14 +377,13 @@ export async function saveScorecard(scorecard: {
   date: string;
   players: PlayerScores[];
   courseId?: string;
+  scheduleEntryId?: string;
 }): Promise<Scorecard> {
   await ensureDatabaseReady();
   const weekendId = await requireActiveWeekendId();
-  const scheduleEntryId = await findScheduleEntryIdForScorecard(
-    weekendId,
-    scorecard.date,
-    scorecard.course,
-  );
+  const scheduleEntryId =
+    scorecard.scheduleEntryId ??
+    (await findScheduleEntryIdForScorecard(weekendId, scorecard.date, scorecard.course));
   const db = getDb();
 
   const [row] = await db

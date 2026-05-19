@@ -5,6 +5,15 @@ export type ScheduleItemLike = {
   course: string;
   date: string;
   notes?: string;
+  createdAt?: string;
+};
+
+export type ScorecardRoundLike = {
+  id?: string;
+  date: string;
+  course: string;
+  scheduleEntryId?: string;
+  createdAt?: string;
 };
 
 export function formatScheduleDate(date: string) {
@@ -19,14 +28,110 @@ export function formatScheduleDate(date: string) {
   });
 }
 
+export function formatScheduleDateFull(date: string) {
+  const parsed = new Date(`${date}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return date;
+  }
+  return parsed.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+export function compareScheduledRounds(a: ScheduleItemLike, b: ScheduleItemLike) {
+  const byDate = a.date.localeCompare(b.date);
+  if (byDate !== 0) {
+    return byDate;
+  }
+  const byTitle = a.title.localeCompare(b.title);
+  if (byTitle !== 0) {
+    return byTitle;
+  }
+  return (a.createdAt ?? "").localeCompare(b.createdAt ?? "");
+}
+
+export function listScheduledRounds(schedule: ScheduleItemLike[]): ScheduleItemLike[] {
+  return schedule
+    .filter((item) => item.kind === "round")
+    .sort(compareScheduledRounds);
+}
+
+/** Primary line for a golf round in pickers and scorecards (course name). */
+export function roundPrimaryLabel(round: ScheduleItemLike) {
+  return round.kind === "round" ? round.course : round.title;
+}
+
+function roundsOnSameDay(schedule: ScheduleItemLike[], date: string) {
+  return schedule.filter((item) => item.kind === "round" && item.date === date);
+}
+
+/** Whether to show the schedule title to distinguish multiple rounds on one day. */
+export function shouldShowRoundTitle(
+  round: ScheduleItemLike,
+  schedule: ScheduleItemLike[],
+) {
+  const onDay = roundsOnSameDay(schedule, round.date);
+  if (onDay.length <= 1) {
+    return false;
+  }
+  return Boolean(round.title.trim());
+}
+
+/** Secondary line: weekday + date, plus title when multiple rounds share a day. */
+export function roundSecondaryLabel(
+  round: ScheduleItemLike,
+  schedule: ScheduleItemLike[],
+) {
+  const datePart = formatScheduleDate(round.date);
+  if (shouldShowRoundTitle(round, schedule)) {
+    return `${datePart} · ${round.title}`;
+  }
+  return datePart;
+}
+
+export function roundSelectLabel(round: ScheduleItemLike, schedule: ScheduleItemLike[]) {
+  return `${roundPrimaryLabel(round)} · ${roundSecondaryLabel(round, schedule)}`;
+}
+
 export function scorecardMatchKey(date: string, course: string) {
   return `${date}|${course.trim().toLowerCase()}`;
+}
+
+export function matchesScheduleRound(
+  scorecard: ScorecardRoundLike,
+  round: ScheduleItemLike,
+): boolean {
+  if (scorecard.scheduleEntryId && scorecard.scheduleEntryId === round.id) {
+    return true;
+  }
+  if (scorecard.scheduleEntryId) {
+    return false;
+  }
+  return (
+    scorecard.date === round.date &&
+    scorecard.course.trim().toLowerCase() === round.course.trim().toLowerCase()
+  );
+}
+
+export function findScorecardForRound<T extends ScorecardRoundLike>(
+  scorecards: T[],
+  round: ScheduleItemLike,
+): T | null {
+  return scorecards.find((entry) => matchesScheduleRound(entry, round)) ?? null;
 }
 
 export function resolveScorecardRoundFromSchedule(
   round: ScheduleItemLike & { courseId?: string },
   golfCourses: Array<{ id: string; name: string }>,
-): { courseId: string; course: string; date: string } | null {
+): {
+  scheduleEntryId: string;
+  courseId: string;
+  course: string;
+  date: string;
+} | null {
   if (round.kind !== "round") {
     return null;
   }
@@ -42,6 +147,7 @@ export function resolveScorecardRoundFromSchedule(
   }
 
   return {
+    scheduleEntryId: round.id,
     courseId: match.id,
     course: match.name,
     date: round.date,
@@ -49,29 +155,78 @@ export function resolveScorecardRoundFromSchedule(
 }
 
 export function isRoundScored(
-  date: string,
-  course: string,
-  scorecards: Array<{ date: string; course: string }>,
+  round: ScheduleItemLike,
+  scorecards: ScorecardRoundLike[],
 ): boolean {
-  const key = scorecardMatchKey(date, course);
-  return scorecards.some((entry) => scorecardMatchKey(entry.date, entry.course) === key);
+  return scorecards.some((entry) => matchesScheduleRound(entry, round));
 }
 
-export function listScheduledRounds(schedule: ScheduleItemLike[]): ScheduleItemLike[] {
-  return schedule
-    .filter((item) => item.kind === "round")
-    .sort((a, b) => {
-      const byDate = a.date.localeCompare(b.date);
-      if (byDate !== 0) {
-        return byDate;
-      }
-      return a.title.localeCompare(b.title);
-    });
+export function orderPostedScorecards<
+  T extends ScorecardRoundLike & { id: string; players: unknown[]; createdAt: string },
+>(schedule: ScheduleItemLike[], scorecards: T[]) {
+  const rounds = listScheduledRounds(schedule);
+  const used = new Set<string>();
+  const ordered: Array<{ round: ScheduleItemLike | null; scorecard: T }> = [];
+
+  for (const item of rounds) {
+    const match = findScorecardForRound(scorecards, item);
+    if (match && !used.has(match.id)) {
+      used.add(match.id);
+      ordered.push({ round: item, scorecard: match });
+    }
+  }
+
+  const orphans = scorecards
+    .filter((entry) => !used.has(entry.id))
+    .sort(
+      (a, b) =>
+        b.date.localeCompare(a.date) || (b.createdAt ?? "").localeCompare(a.createdAt ?? ""),
+    );
+
+  for (const scorecard of orphans) {
+    ordered.push({ round: null, scorecard });
+  }
+
+  return ordered;
+}
+
+export type ScheduledRoundOption = {
+  scheduleId: string;
+  id: string;
+  label: string;
+  dateLabel: string;
+  selectLabel: string;
+  chipTitle: string;
+  chipSubtitle: string;
+  hasScores: boolean;
+  round: ScheduleItemLike;
+};
+
+export function buildScheduledRoundOptions(
+  schedule: ScheduleItemLike[],
+  scorecards: ScorecardRoundLike[],
+): ScheduledRoundOption[] {
+  const rounds = listScheduledRounds(schedule);
+
+  return rounds.map((item) => {
+    const scorecard = findScorecardForRound(scorecards, item);
+    return {
+      scheduleId: item.id,
+      id: scorecard?.id ?? `schedule-${item.id}`,
+      label: roundPrimaryLabel(item),
+      dateLabel: roundSecondaryLabel(item, rounds),
+      selectLabel: roundSelectLabel(item, rounds),
+      chipTitle: roundPrimaryLabel(item),
+      chipSubtitle: formatScheduleDate(item.date),
+      hasScores: Boolean(scorecard),
+      round: item,
+    };
+  });
 }
 
 export function findUpNext(
   schedule: ScheduleItemLike[],
-  scorecards: Array<{ date: string; course: string }>,
+  scorecards: ScorecardRoundLike[],
 ): ScheduleItemLike | null {
   const today = new Date().toISOString().slice(0, 10);
   const rounds = listScheduledRounds(schedule);
@@ -80,10 +235,8 @@ export function findUpNext(
     return null;
   }
 
-  const scored = new Set(scorecards.map((entry) => scorecardMatchKey(entry.date, entry.course)));
-
   const upcomingUnscored = rounds.find(
-    (item) => item.date >= today && !scored.has(scorecardMatchKey(item.date, item.course)),
+    (item) => item.date >= today && !isRoundScored(item, scorecards),
   );
   if (upcomingUnscored) {
     return upcomingUnscored;
@@ -94,9 +247,7 @@ export function findUpNext(
     return nextOnCalendar;
   }
 
-  const anyUnscored = rounds.find(
-    (item) => !scored.has(scorecardMatchKey(item.date, item.course)),
-  );
+  const anyUnscored = rounds.find((item) => !isRoundScored(item, scorecards));
   if (anyUnscored) {
     return anyUnscored;
   }

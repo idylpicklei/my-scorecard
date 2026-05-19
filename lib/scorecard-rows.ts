@@ -15,8 +15,10 @@ export type SavedScorecardLike = {
   id: string;
   course: string;
   courseId?: string;
+  scheduleEntryId?: string;
   date: string;
   players: ScorecardPlayer[];
+  createdAt?: string;
 };
 
 export function scorecardToRows(scorecard: SavedScorecardLike): ScoreRow[] {

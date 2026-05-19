@@ -10,10 +10,13 @@ import { ScoreboardPanel } from "@/app/scoreboard-panel";
 import { ScorecardsPanel, type SavedScorecard } from "@/app/scorecards-panel";
 import { scorecardToRows } from "@/lib/scorecard-rows";
 import {
+  compareScheduledRounds,
   findUpNext,
   formatScheduleDate,
+  formatScheduleDateFull,
   isRoundScored,
   resolveScorecardRoundFromSchedule,
+  roundPrimaryLabel,
 } from "@/lib/schedule-utils";
 import type { GolfCourseLayout } from "@/lib/golf-course";
 import { mergeScannedIntoEntryPlayers } from "@/lib/scorecard-scan";
@@ -146,6 +149,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
   const [golfCourses, setGolfCourses] = useState<GolfCourseLayout[]>([]);
   const [showCourseSetup, setShowCourseSetup] = useState(false);
   const [scorecardForm, setScorecardForm] = useState({
+    scheduleEntryId: "",
     courseId: "",
     course: "",
     date: "",
@@ -230,7 +234,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
     if (!matchesNext) {
       return null;
     }
-    return `Next round: ${nextRoundForEntry.title} · ${nextRoundForEntry.course} · ${formatScheduleDate(nextRoundForEntry.date)}`;
+    return `Next round: ${roundPrimaryLabel(nextRoundForEntry)} · ${formatScheduleDate(nextRoundForEntry.date)}`;
   }, [nextRoundForEntry, scorecardForm.course, scorecardForm.date]);
 
   useEffect(() => {
@@ -246,29 +250,35 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
     }
 
     setScorecardForm((previous) => {
-      if (
-        previous.courseId &&
-        !isRoundScored(previous.date, previous.course, savedScorecards)
-      ) {
-        return previous;
+      if (previous.courseId && previous.scheduleEntryId) {
+        const priorRound = schedule.find((item) => item.id === previous.scheduleEntryId);
+        if (priorRound && !isRoundScored(priorRound, savedScorecards)) {
+          return previous;
+        }
       }
-      return resolved;
+      return {
+        scheduleEntryId: resolved.scheduleEntryId,
+        courseId: resolved.courseId,
+        course: resolved.course,
+        date: resolved.date,
+      };
     });
   }, [activeTab, userRole, nextRoundForEntry, golfCourses, savedScorecards]);
 
-  const tabs = useMemo(
-    () =>
-      TABS.map((tab) =>
-        tab.id === "upload"
-          ? {
-              ...tab,
-              label: userRole === "admin" ? "Upload Scorecard" : "Scorecards",
-              shortLabel: userRole === "admin" ? "Upload" : "Cards",
-            }
-          : tab,
-      ),
-    [userRole],
-  );
+  const tabs = useMemo(() => {
+    const visible = TABS.filter((tab) => userRole === "admin" || tab.id !== "upload");
+    return visible.map((tab) =>
+      tab.id === "upload"
+        ? { ...tab, label: "Upload Scorecard", shortLabel: "Upload" }
+        : tab,
+    );
+  }, [userRole]);
+
+  useEffect(() => {
+    if (userRole !== "admin" && activeTab === "upload") {
+      setActiveTab("scoreboard");
+    }
+  }, [userRole, activeTab]);
 
   async function handleTeamSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -360,6 +370,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
       },
       body: JSON.stringify({
         courseId: scorecardForm.courseId,
+        scheduleEntryId: scorecardForm.scheduleEntryId || undefined,
         course: scorecardForm.course,
         date: scorecardForm.date,
         players: scoreCardPlayers.filter((p) => p.playerName.trim().length > 0),
@@ -390,12 +401,17 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
         refreshed?.courses ?? golfCourses,
       );
       if (resolved?.courseId) {
-        setScorecardForm(resolved);
+        setScorecardForm({
+          scheduleEntryId: resolved.scheduleEntryId,
+          courseId: resolved.courseId,
+          course: resolved.course,
+          date: resolved.date,
+        });
       } else {
-        setScorecardForm({ courseId: "", course: "", date: "" });
+        setScorecardForm({ scheduleEntryId: "", courseId: "", course: "", date: "" });
       }
     } else {
-      setScorecardForm({ courseId: "", course: "", date: "" });
+      setScorecardForm({ scheduleEntryId: "", courseId: "", course: "", date: "" });
     }
   }
 
@@ -499,7 +515,11 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
       )}
 
       <nav className="sticky top-0 z-10 border-b border-stone-200 bg-white sm:static sm:border-0 sm:bg-transparent" aria-label="Dashboard sections">
-        <div className="-mb-px flex overflow-x-auto overscroll-x-contain sm:grid sm:grid-cols-3 sm:gap-2 lg:grid-cols-6">
+        <div
+          className={`-mb-px flex overflow-x-auto overscroll-x-contain sm:grid sm:gap-2 ${
+            tabs.length >= 6 ? "sm:grid-cols-3 lg:grid-cols-6" : "sm:grid-cols-3 lg:grid-cols-5"
+          }`}
+        >
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
@@ -537,7 +557,9 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
           <section>
             <h2 className="text-lg font-bold text-stone-900">Score Board</h2>
             <p className="mt-1 hidden text-sm text-stone-600 sm:block">
-              Upcoming round stroke holes at the top; gross and net totals by round below.
+              {userRole === "admin"
+                ? "Upcoming round stroke holes at the top; gross and net totals by round below."
+                : "Stroke guide, round totals, and posted hole-by-hole scorecards."}
             </p>
 
             <ScoreboardPanel
@@ -548,6 +570,17 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
               handicapsByPlayer={handicapsByPlayer}
               currentUser={currentUser}
             />
+
+            {userRole !== "admin" ? (
+              <ScorecardsPanel
+                scorecards={savedScorecards}
+                schedule={schedule}
+                golfCourses={golfCourses}
+                handicapsByPlayer={handicapsByPlayer}
+                currentUser={currentUser}
+                showStrokePreview={false}
+              />
+            ) : null}
 
             {userRole === "admin" ? (
               <div className="mt-6 border-t border-stone-200 pt-4">
@@ -602,7 +635,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
             </p>
 
             <div className="mt-4 sm:space-y-3">
-              {schedule.map((item) => (
+              {[...schedule].sort(compareScheduledRounds).map((item) => (
                 <article
                   key={item.id}
                   className={`border-b py-3 last:border-b-0 sm:rounded-xl sm:border sm:p-4 ${
@@ -621,23 +654,27 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                     >
                       {item.kind === "dinner" ? "Dinner" : "Golf round"}
                     </span>
-                    <p className="text-sm font-bold text-stone-900">{item.title}</p>
+                    <p className="text-sm font-bold text-stone-900">
+                      {item.kind === "round" ? item.course : item.title}
+                    </p>
                   </div>
-                  <p className="mt-1 text-sm text-stone-700">
-                    {item.kind === "dinner"
-                      ? item.course === "—"
-                        ? "Venue TBD"
-                        : item.course
-                      : item.course}
-                    {item.kind === "round" && item.courseId ? (
-                      <span className="text-stone-500">
-                        {" "}
-                        · Par {courseById.get(item.courseId)?.totalPar ?? "—"}
-                      </span>
-                    ) : null}
-                  </p>
+                  {item.kind === "round" ? (
+                    <p className="mt-1 text-xs text-stone-600">
+                      {item.title}
+                      {item.courseId ? (
+                        <span>
+                          {" "}
+                          · Par {courseById.get(item.courseId)?.totalPar ?? "—"}
+                        </span>
+                      ) : null}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-sm text-stone-700">
+                      {item.course === "—" ? "Venue TBD" : item.course}
+                    </p>
+                  )}
                   <p className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-800">
-                    {item.date}
+                    {formatScheduleDate(item.date)}
                   </p>
                   {item.notes ? (
                     <p className="mt-2 text-sm text-stone-600">{item.notes}</p>
@@ -713,23 +750,28 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                     <option value="dinner">Dinner plan</option>
                   </select>
                 </div>
-                <input
-                  type="text"
-                  value={scheduleForm.title}
-                  onChange={(event) =>
-                    setScheduleForm((previous) => ({
-                      ...previous,
-                      title: event.target.value,
-                    }))
-                  }
-                  placeholder={
-                    scheduleForm.kind === "dinner"
-                      ? "e.g. Saturday team dinner"
-                      : "Round title"
-                  }
-                  className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
-                  required
-                />
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
+                    {scheduleForm.kind === "round" ? "Round date" : "Date"}
+                  </label>
+                  <input
+                    type="date"
+                    value={scheduleForm.date}
+                    onChange={(event) =>
+                      setScheduleForm((previous) => ({
+                        ...previous,
+                        date: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
+                    required
+                  />
+                  {scheduleForm.date ? (
+                    <p className="mt-1 text-xs text-stone-600">
+                      {formatScheduleDateFull(scheduleForm.date)}
+                    </p>
+                  ) : null}
+                </div>
                 {scheduleForm.kind === "round" ? (
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
@@ -771,18 +813,28 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                     className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
                   />
                 )}
-                <input
-                  type="date"
-                  value={scheduleForm.date}
-                  onChange={(event) =>
-                    setScheduleForm((previous) => ({
-                      ...previous,
-                      date: event.target.value,
-                    }))
-                  }
-                  className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
-                  required
-                />
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
+                    {scheduleForm.kind === "round" ? "Round label" : "Title"}
+                  </label>
+                  <input
+                    type="text"
+                    value={scheduleForm.title}
+                    onChange={(event) =>
+                      setScheduleForm((previous) => ({
+                        ...previous,
+                        title: event.target.value,
+                      }))
+                    }
+                    placeholder={
+                      scheduleForm.kind === "dinner"
+                        ? "e.g. Saturday team dinner"
+                        : "e.g. Morning round (for ordering when two rounds share a day)"
+                    }
+                    className="mt-2 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
+                    required
+                  />
+                </div>
                 <textarea
                   value={scheduleForm.notes}
                   onChange={(event) =>
@@ -812,10 +864,8 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
           </section>
         ) : null}
 
-        {activeTab === "upload" ? (
+        {activeTab === "upload" && userRole === "admin" ? (
           <section>
-            {userRole === "admin" ? (
-              <>
             <h2 className="text-lg font-bold text-stone-900">Upload Scorecard</h2>
             <p className="mt-1 hidden text-sm text-stone-600 sm:block">
               Scan a photo to fill scores, or tap each hole manually. Review before saving.
@@ -834,6 +884,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                         ...previous,
                         courseId,
                         course: course?.name ?? "",
+                        scheduleEntryId: "",
                       }));
                     }}
                     className="mt-2 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
@@ -853,7 +904,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                   ) : null}
                 </div>
                 <div>
-                  <label className="text-sm font-semibold text-stone-700">Round Date</label>
+                  <label className="text-sm font-semibold text-stone-700">Round date</label>
                   <input
                     type="date"
                     value={scorecardForm.date}
@@ -861,11 +912,17 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                       setScorecardForm((previous) => ({
                         ...previous,
                         date: event.target.value,
+                        scheduleEntryId: "",
                       }))
                     }
                     className="mt-2 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none transition focus:border-emerald-700"
                     required
                   />
+                  {scorecardForm.date ? (
+                    <p className="mt-1 text-xs text-stone-600">
+                      {formatScheduleDateFull(scorecardForm.date)}
+                    </p>
+                  ) : null}
                 </div>
               </div>
 
@@ -904,23 +961,6 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                 </button>
               </div>
             </form>
-              </>
-            ) : (
-              <>
-                <h2 className="text-lg font-bold text-stone-900">Scorecards</h2>
-                <p className="mt-1 hidden text-sm text-stone-600 sm:block">
-                  See stroke holes for the upcoming round, then expand posted rounds for hole-by-hole
-                  scores.
-                </p>
-                <ScorecardsPanel
-                  scorecards={savedScorecards}
-                  schedule={schedule}
-                  golfCourses={golfCourses}
-                  handicapsByPlayer={handicapsByPlayer}
-                  currentUser={currentUser}
-                />
-              </>
-            )}
           </section>
         ) : null}
 

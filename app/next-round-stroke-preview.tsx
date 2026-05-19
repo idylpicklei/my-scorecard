@@ -16,6 +16,9 @@ import {
   formatScheduleDate,
   isRoundScored,
   listScheduledRounds,
+  roundPrimaryLabel,
+  roundSecondaryLabel,
+  roundSelectLabel,
   resolveScorecardRoundFromSchedule,
   type ScheduleItemLike,
 } from "@/lib/schedule-utils";
@@ -37,8 +40,8 @@ type NextRoundStrokePreviewProps = {
 
 type RoundOption = {
   id: string;
-  title: string;
-  course: string;
+  chipTitle: string;
+  chipSubtitle: string;
   dateLabel: string;
   selectLabel: string;
   scored: boolean;
@@ -138,13 +141,14 @@ export function NextRoundStrokePreview({
   groupPlayers = TRIP_PLAYERS,
 }: NextRoundStrokePreviewProps) {
   const roundOptions = useMemo((): RoundOption[] => {
-    return listScheduledRounds(schedule).map((round) => ({
+    const rounds = listScheduledRounds(schedule);
+    return rounds.map((round) => ({
       id: round.id,
-      title: round.title,
-      course: round.course,
+      chipTitle: roundPrimaryLabel(round),
+      chipSubtitle: roundSecondaryLabel(round, rounds),
       dateLabel: formatScheduleDate(round.date),
-      selectLabel: `${round.title} · ${round.course} · ${formatScheduleDate(round.date)}`,
-      scored: isRoundScored(round.date, round.course, scorecards),
+      selectLabel: roundSelectLabel(round, rounds),
+      scored: isRoundScored(round, scorecards),
       round,
     }));
   }, [schedule, scorecards]);
@@ -235,13 +239,13 @@ export function NextRoundStrokePreview({
                     : "border-stone-300 bg-white text-stone-800"
                 }`}
               >
-                <span className="block text-xs font-bold leading-tight">{option.title}</span>
+                <span className="block text-xs font-bold leading-tight">{option.chipTitle}</span>
                 <span
                   className={`mt-0.5 block text-[10px] leading-tight ${
                     isActive ? "text-emerald-100" : "text-stone-500"
                   }`}
                 >
-                  {option.dateLabel}
+                  {option.chipSubtitle}
                 </span>
               </button>
             );
@@ -271,11 +275,9 @@ export function NextRoundStrokePreview({
         </div>
       </div>
 
-      <h3 className="mt-3 text-base font-bold text-stone-900">
-        {round.title} · {round.course}
-      </h3>
+      <h3 className="mt-3 text-base font-bold text-stone-900">{roundPrimaryLabel(round)}</h3>
       <p className="text-sm text-stone-600">
-        {formatScheduleDate(round.date)}
+        {roundSecondaryLabel(round, listScheduledRounds(schedule))}
         {scored ? " · scores posted" : " · upcoming"}
       </p>
 
