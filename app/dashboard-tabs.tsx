@@ -5,6 +5,7 @@ import { CourseSetupForm } from "@/app/course-setup-form";
 import { DashboardOverview } from "@/app/dashboard-overview";
 import { ScorecardEntry } from "@/app/scorecard-entry";
 import { ScorecardScanUpload } from "@/app/scorecard-scan-upload";
+import { SkinsGamePanel } from "@/app/skins-game-panel";
 import { ScoreboardPanel } from "@/app/scoreboard-panel";
 import { ScorecardsPanel, type SavedScorecard } from "@/app/scorecards-panel";
 import { scorecardToRows } from "@/lib/scorecard-rows";
@@ -88,11 +89,6 @@ function defaultScorecardPlayers() {
 }
 
 const GAMES = [
-  {
-    name: "Skins",
-    details: "$5 per hole, ties carry over to next hole",
-    status: "Active",
-  },
   {
     name: "Nassau",
     details: "Front 9, Back 9, and Overall bets",
@@ -1058,7 +1054,12 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
               Active and recent side games for this weekend.
             </p>
 
-            <div className="mt-4 space-y-3">
+            <SkinsGamePanel schedule={schedule} scorecards={savedScorecards} />
+
+            <div className="mt-8 space-y-3">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-stone-600">
+                More games
+              </h3>
               {GAMES.map((game) => (
                 <article
                   key={game.name}

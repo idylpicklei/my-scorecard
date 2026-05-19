@@ -15,7 +15,8 @@ export function ScorecardScanUpload({
   onApply,
   disabled = false,
 }: ScorecardScanUploadProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -38,14 +39,22 @@ export function ScorecardScanUpload({
     setSelectedFile(null);
     setError(null);
     setLastResult(null);
-    if (inputRef.current) {
-      inputRef.current.value = "";
+    if (galleryInputRef.current) {
+      galleryInputRef.current.value = "";
+    }
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = "";
     }
   }
 
-  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    clearSelection();
+  function applySelectedFile(file: File | undefined) {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewUrl(null);
+    setSelectedFile(null);
+    setError(null);
+    setLastResult(null);
 
     if (!file) {
       return;
@@ -60,9 +69,15 @@ export function ScorecardScanUpload({
     setPreviewUrl(URL.createObjectURL(file));
   }
 
+  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    applySelectedFile(file);
+    event.target.value = "";
+  }
+
   async function handleScan() {
     if (!selectedFile) {
-      setError("Take or choose a scorecard photo first.");
+      setError("Choose a scorecard photo from your library or take one first.");
       return;
     }
 
@@ -121,8 +136,8 @@ export function ScorecardScanUpload({
         <div>
           <h3 className="text-sm font-bold text-stone-900">Scan scorecard photo</h3>
           <p className="mt-1 text-xs text-stone-600">
-            Photograph the completed card — Gemini reads names and hole scores into the form
-            below. Review before saving.
+            Use a photo from your camera roll or take a new picture — Gemini reads names and hole
+            scores into the form below. Review before saving.
           </p>
         </div>
         {selectedFile ? (
@@ -138,7 +153,15 @@ export function ScorecardScanUpload({
       </div>
 
       <input
-        ref={inputRef}
+        ref={galleryInputRef}
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        disabled={disabled || isScanning}
+        onChange={handleFileChange}
+      />
+      <input
+        ref={cameraInputRef}
         type="file"
         accept="image/*"
         capture="environment"
@@ -147,20 +170,30 @@ export function ScorecardScanUpload({
         onChange={handleFileChange}
       />
 
-      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-        <button
-          type="button"
-          disabled={disabled || isScanning}
-          onClick={() => inputRef.current?.click()}
-          className="flex-1 rounded-xl border border-emerald-700 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {selectedFile ? "Change photo" : "Take or choose photo"}
-        </button>
+      <div className="mt-3 flex flex-col gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <button
+            type="button"
+            disabled={disabled || isScanning}
+            onClick={() => galleryInputRef.current?.click()}
+            className="rounded-xl border border-emerald-700 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {selectedFile ? "Change photo" : "Choose from photos"}
+          </button>
+          <button
+            type="button"
+            disabled={disabled || isScanning}
+            onClick={() => cameraInputRef.current?.click()}
+            className="rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Take photo
+          </button>
+        </div>
         <button
           type="button"
           disabled={disabled || isScanning || !selectedFile}
           onClick={() => void handleScan()}
-          className="flex-1 rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isScanning ? "Reading scorecard…" : "Fill scores from photo"}
         </button>
