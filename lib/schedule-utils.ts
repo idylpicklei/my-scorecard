@@ -4,6 +4,7 @@ export type ScheduleItemLike = {
   title: string;
   course: string;
   date: string;
+  sortOrder?: number;
   notes?: string;
   createdAt?: string;
 };
@@ -41,16 +42,30 @@ export function formatScheduleDateFull(date: string) {
   });
 }
 
-export function compareScheduledRounds(a: ScheduleItemLike, b: ScheduleItemLike) {
+export function compareScheduleItems(a: ScheduleItemLike, b: ScheduleItemLike) {
   const byDate = a.date.localeCompare(b.date);
   if (byDate !== 0) {
     return byDate;
   }
-  const byTitle = a.title.localeCompare(b.title);
-  if (byTitle !== 0) {
-    return byTitle;
+  const byOrder = (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+  if (byOrder !== 0) {
+    return byOrder;
   }
   return (a.createdAt ?? "").localeCompare(b.createdAt ?? "");
+}
+
+/** @deprecated Use compareScheduleItems */
+export const compareScheduledRounds = compareScheduleItems;
+
+export function roundsOnSameDayCount(schedule: ScheduleItemLike[], date: string) {
+  return roundsOnSameDay(schedule, date).length;
+}
+
+export function canReorderScheduleRound(
+  item: ScheduleItemLike,
+  schedule: ScheduleItemLike[],
+) {
+  return item.kind === "round" && roundsOnSameDayCount(schedule, item.date) > 1;
 }
 
 export function listScheduledRounds(schedule: ScheduleItemLike[]): ScheduleItemLike[] {

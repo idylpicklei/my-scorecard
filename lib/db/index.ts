@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, asc, desc, eq, gt, lt, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lt, or, sql } from "drizzle-orm";
 import {
   passwordResets,
   scheduleEntries,
@@ -59,6 +59,7 @@ export type ScheduleEntry = {
   course: string;
   courseId?: string;
   date: string;
+  sortOrder: number;
   notes?: string;
   createdAt: string;
 };
@@ -158,6 +159,7 @@ function mapSchedule(row: typeof scheduleEntries.$inferSelect): ScheduleEntry {
     course: row.course,
     courseId: row.courseId ?? undefined,
     date: row.date,
+    sortOrder: row.sortOrder ?? 0,
     notes: row.notes ?? undefined,
     createdAt: row.createdAt.toISOString(),
   };
@@ -343,6 +345,28 @@ export async function setTeams(teams: DashboardTeam[]): Promise<DashboardTeam[]>
   return teams;
 }
 
+async function nextSortOrderForDate(
+  db: ReturnType<typeof getDb>,
+  weekendId: string,
+  date: string,
+  kind: ScheduleKind,
+): Promise<number> {
+  const [row] = await db
+    .select({
+      maxOrder: sql<number>`coalesce(max(${scheduleEntries.sortOrder}), -1)`,
+    })
+    .from(scheduleEntries)
+    .where(
+      and(
+        eq(scheduleEntries.weekendId, weekendId),
+        eq(scheduleEntries.date, date),
+        eq(scheduleEntries.kind, kind),
+      ),
+    );
+
+  return (row?.maxOrder ?? -1) + 1;
+}
+
 export async function addScheduleEntry(entry: {
   title: string;
   course: string;
@@ -355,6 +379,7 @@ export async function addScheduleEntry(entry: {
   const weekendId = await requireActiveWeekendId();
   const db = getDb();
   const kind = entry.kind === "dinner" ? "dinner" : "round";
+  const sortOrder = await nextSortOrderForDate(db, weekendId, entry.date, kind);
 
   const [row] = await db
     .insert(scheduleEntries)
@@ -365,11 +390,74 @@ export async function addScheduleEntry(entry: {
       course: entry.course,
       courseId: entry.courseId ?? null,
       date: entry.date,
+      sortOrder,
       notes: entry.notes,
     })
     .returning();
 
   return mapSchedule(row);
+}
+
+export async function reorderScheduleEntry(
+  entryId: string,
+  direction: "up" | "down",
+): Promise<ScheduleEntry[] | null> {
+  await ensureDatabaseReady();
+  const weekendId = await requireActiveWeekendId();
+  const db = getDb();
+
+  const [entry] = await db
+    .select()
+    .from(scheduleEntries)
+    .where(and(eq(scheduleEntries.id, entryId), eq(scheduleEntries.weekendId, weekendId)))
+    .limit(1);
+
+  if (!entry || entry.kind !== "round") {
+    return null;
+  }
+
+  const siblings = await db
+    .select()
+    .from(scheduleEntries)
+    .where(
+      and(
+        eq(scheduleEntries.weekendId, weekendId),
+        eq(scheduleEntries.date, entry.date),
+        eq(scheduleEntries.kind, "round"),
+      ),
+    )
+    .orderBy(asc(scheduleEntries.sortOrder), asc(scheduleEntries.createdAt));
+
+  if (siblings.length < 2) {
+    return null;
+  }
+
+  const index = siblings.findIndex((row) => row.id === entryId);
+  if (index < 0) {
+    return null;
+  }
+
+  const targetIndex = direction === "up" ? index - 1 : index + 1;
+  if (targetIndex < 0 || targetIndex >= siblings.length) {
+    return siblings.map(mapSchedule);
+  }
+
+  const reordered = [...siblings];
+  const [moved] = reordered.splice(index, 1);
+  reordered.splice(targetIndex, 0, moved);
+
+  await db.transaction(async (tx) => {
+    for (let position = 0; position < reordered.length; position += 1) {
+      await tx
+        .update(scheduleEntries)
+        .set({ sortOrder: position })
+        .where(eq(scheduleEntries.id, reordered[position]!.id));
+    }
+  });
+
+  return reordered.map((row, position) =>
+    mapSchedule({ ...row, sortOrder: position }),
+  );
 }
 
 export async function saveScorecard(scorecard: {

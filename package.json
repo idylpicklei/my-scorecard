@@ -18,7 +18,8 @@
     "db:add-handicaps": "tsx scripts/apply-handicap-migration.ts",
     "db:add-weekends": "tsx scripts/apply-weekends-migration.ts",
     "db:add-schedule-kind": "tsx scripts/apply-schedule-kind-migration.ts",
-    "db:add-golf-courses": "tsx scripts/apply-golf-courses-migration.ts"
+    "db:add-golf-courses": "tsx scripts/apply-golf-courses-migration.ts",
+    "db:add-schedule-sort-order": "tsx scripts/apply-schedule-sort-order-migration.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

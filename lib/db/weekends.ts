@@ -23,6 +23,7 @@ type ScheduleEntry = {
   course: string;
   courseId?: string;
   date: string;
+  sortOrder: number;
   notes?: string;
   createdAt: string;
 };
@@ -184,7 +185,11 @@ export async function getWeekendDashboardData(weekendId: string): Promise<{
     .select()
     .from(scheduleEntries)
     .where(eq(scheduleEntries.weekendId, weekendId))
-    .orderBy(asc(scheduleEntries.date), asc(scheduleEntries.createdAt));
+    .orderBy(
+      asc(scheduleEntries.date),
+      asc(scheduleEntries.sortOrder),
+      asc(scheduleEntries.createdAt),
+    );
 
   const scorecardRows = await db
     .select()
@@ -205,6 +210,7 @@ export async function getWeekendDashboardData(weekendId: string): Promise<{
       course: entry.course,
       courseId: entry.courseId ?? undefined,
       date: entry.date,
+      sortOrder: entry.sortOrder ?? 0,
       notes: entry.notes ?? undefined,
       createdAt: entry.createdAt.toISOString(),
     })),

@@ -10,7 +10,8 @@ import { ScoreboardPanel } from "@/app/scoreboard-panel";
 import { ScorecardsPanel, type SavedScorecard } from "@/app/scorecards-panel";
 import { scorecardToRows } from "@/lib/scorecard-rows";
 import {
-  compareScheduledRounds,
+  canReorderScheduleRound,
+  compareScheduleItems,
   findUpNext,
   formatScheduleDate,
   formatScheduleDateFull,
@@ -67,6 +68,7 @@ type ScheduleItem = {
   course: string;
   courseId?: string;
   date: string;
+  sortOrder?: number;
   notes?: string;
   createdAt: string;
 };
@@ -142,6 +144,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
   const [error, setError] = useState<string | null>(null);
   const [isSavingTeams, setIsSavingTeams] = useState(false);
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+  const [reorderingScheduleId, setReorderingScheduleId] = useState<string | null>(null);
   const [isSavingScorecard, setIsSavingScorecard] = useState(false);
   const [savedScorecards, setSavedScorecards] = useState<SavedScorecard[]>([]);
   const [scoreRows, setScoreRows] = useState<ScoreRow[]>(emptyScoreRows);
@@ -213,6 +216,32 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
   const courseById = useMemo(() => {
     return new Map(golfCourses.map((course) => [course.id, course]));
   }, [golfCourses]);
+
+  const sortedSchedule = useMemo(
+    () => [...schedule].sort(compareScheduleItems),
+    [schedule],
+  );
+
+  const roundsByDate = useMemo(() => {
+    const map = new Map<string, ScheduleItem[]>();
+    for (const item of schedule) {
+      if (item.kind !== "round") {
+        continue;
+      }
+      const list = map.get(item.date) ?? [];
+      list.push(item);
+      map.set(item.date, list);
+    }
+    for (const [date, list] of map) {
+      map.set(date, [...list].sort(compareScheduleItems));
+    }
+    return map;
+  }, [schedule]);
+
+  const hasMultiRoundDays = useMemo(
+    () => [...roundsByDate.values()].some((rounds) => rounds.length > 1),
+    [roundsByDate],
+  );
 
   const selectedUploadCourse = useMemo(() => {
     return golfCourses.find((course) => course.id === scorecardForm.courseId) ?? null;
@@ -331,16 +360,9 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
     }
 
     const payload = (await response.json()) as { entry: ScheduleItem };
-    setSchedule((previous) => {
-      const merged = [...previous, payload.entry];
-      return merged.sort((a, b) => {
-        const byDate = a.date.localeCompare(b.date);
-        if (byDate !== 0) {
-          return byDate;
-        }
-        return a.createdAt.localeCompare(b.createdAt);
-      });
-    });
+    setSchedule((previous) =>
+      [...previous, payload.entry].sort(compareScheduleItems),
+    );
     setScheduleForm({
       kind: "round",
       title: "",
@@ -350,6 +372,31 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
       notes: "",
     });
     setIsSavingSchedule(false);
+  }
+
+  async function handleReorderScheduleRound(entryId: string, direction: "up" | "down") {
+    setReorderingScheduleId(entryId);
+    setError(null);
+
+    const response = await fetch("/api/admin/schedule", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ id: entryId, direction }),
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: string }
+        | null;
+      setError(payload?.error ?? "Unable to reorder rounds.");
+      setReorderingScheduleId(null);
+      return;
+    }
+
+    await loadDashboard();
+    setReorderingScheduleId(null);
   }
 
   async function handleScorecardSubmit(event: FormEvent<HTMLFormElement>) {
@@ -634,8 +681,24 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
               on the dashboard.
             </p>
 
+            {userRole === "admin" && hasMultiRoundDays ? (
+              <p className="mt-2 text-xs text-stone-600">
+                Two rounds share a day — use Earlier / Later so morning plays before afternoon
+                everywhere (scoreboard, scorecards, upload).
+              </p>
+            ) : null}
+
             <div className="mt-4 sm:space-y-3">
-              {[...schedule].sort(compareScheduledRounds).map((item) => (
+              {sortedSchedule.map((item) => {
+                const dayRounds =
+                  item.kind === "round" ? (roundsByDate.get(item.date) ?? []) : [];
+                const roundIndex = dayRounds.findIndex((round) => round.id === item.id);
+                const showReorder =
+                  userRole === "admin" &&
+                  canReorderScheduleRound(item, schedule) &&
+                  roundIndex >= 0;
+
+                return (
                 <article
                   key={item.id}
                   className={`border-b py-3 last:border-b-0 sm:rounded-xl sm:border sm:p-4 ${
@@ -644,7 +707,7 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                       : "border-stone-200 sm:bg-stone-50"
                   }`}
                 >
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-start gap-2">
                     <span
                       className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${
                         item.kind === "dinner"
@@ -657,6 +720,33 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                     <p className="text-sm font-bold text-stone-900">
                       {item.kind === "round" ? item.course : item.title}
                     </p>
+                    {showReorder ? (
+                      <div
+                        className="ml-auto flex shrink-0 gap-1"
+                        role="group"
+                        aria-label="Reorder round"
+                      >
+                        <button
+                          type="button"
+                          disabled={roundIndex <= 0 || reorderingScheduleId !== null}
+                          onClick={() => void handleReorderScheduleRound(item.id, "up")}
+                          className="rounded-lg border border-stone-300 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Earlier
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            roundIndex >= dayRounds.length - 1 ||
+                            reorderingScheduleId !== null
+                          }
+                          onClick={() => void handleReorderScheduleRound(item.id, "down")}
+                          className="rounded-lg border border-stone-300 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Later
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                   {item.kind === "round" ? (
                     <p className="mt-1 text-xs text-stone-600">
@@ -680,7 +770,8 @@ export function DashboardTabs({ userRole, currentUser }: DashboardTabsProps) {
                     <p className="mt-2 text-sm text-stone-600">{item.notes}</p>
                   ) : null}
                 </article>
-              ))}
+                );
+              })}
             </div>
 
             {userRole === "admin" ? (

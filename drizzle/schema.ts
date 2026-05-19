@@ -1,5 +1,6 @@
 import {
   date,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -80,6 +81,7 @@ export const scheduleEntries = pgTable("schedule_entries", {
   course: text("course").notNull(),
   courseId: uuid("course_id").references(() => golfCourses.id, { onDelete: "set null" }),
   date: date("date", { mode: "string" }).notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
