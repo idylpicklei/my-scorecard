@@ -9,6 +9,15 @@ export type ParsedScorecardPlayer = {
   holes: number[];
 };
 
+/** Default vision model for new Google AI Studio keys (2.0-flash is deprecated for new users). */
+export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+
+const GEMINI_MODEL_FALLBACKS = [
+  DEFAULT_GEMINI_MODEL,
+  "gemini-2.5-flash-lite",
+  "gemini-1.5-flash",
+] as const;
+
 const MIN_SCORE = 1;
 const MAX_SCORE = 15;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -153,6 +162,34 @@ Rules:
 - Do not invent players that are not on the card.`;
 }
 
+function geminiModelsToTry(): string[] {
+  const configured = process.env.GEMINI_MODEL?.trim();
+  if (configured) {
+    return [
+      configured,
+      ...GEMINI_MODEL_FALLBACKS.filter((model) => model !== configured),
+    ];
+  }
+  return [...GEMINI_MODEL_FALLBACKS];
+}
+
+function isGeminiModelUnavailableError(error: unknown): boolean {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("not found") ||
+    lower.includes("not available") ||
+    lower.includes("no longer available") ||
+    lower.includes("does not exist") ||
+    lower.includes("404")
+  );
+}
+
 export async function parseScorecardImageWithGemini(
   imageBytes: Buffer,
   mimeType: string,
@@ -170,37 +207,54 @@ export async function parseScorecardImageWithGemini(
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: process.env.GEMINI_MODEL?.trim() || "gemini-2.0-flash",
-    generationConfig: {
-      responseMimeType: "application/json",
-      temperature: 0.1,
+  const prompt = buildScanPrompt(knownPlayers);
+  const imagePart = {
+    inlineData: {
+      mimeType,
+      data: imageBytes.toString("base64"),
     },
-  });
+  };
 
-  const result = await model.generateContent([
-    { text: buildScanPrompt(knownPlayers) },
-    {
-      inlineData: {
-        mimeType,
-        data: imageBytes.toString("base64"),
-      },
-    },
-  ]);
+  const models = geminiModelsToTry();
+  let lastError: unknown = null;
 
-  const text = result.response.text();
-  if (!text?.trim()) {
-    throw new Error("Gemini did not return any data.");
+  for (const modelName of models) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.1,
+        },
+      });
+
+      const result = await model.generateContent([{ text: prompt }, imagePart]);
+      const text = result.response.text();
+      if (!text?.trim()) {
+        throw new Error("Gemini did not return any data.");
+      }
+
+      let payload: unknown;
+      try {
+        payload = extractJsonPayload(text);
+      } catch {
+        throw new Error("Could not parse scores from the image. Try another photo.");
+      }
+
+      return normalizeGeminiScorecardResponse(payload, knownPlayers);
+    } catch (error) {
+      lastError = error;
+      if (!isGeminiModelUnavailableError(error)) {
+        throw error;
+      }
+    }
   }
 
-  let payload: unknown;
-  try {
-    payload = extractJsonPayload(text);
-  } catch {
-    throw new Error("Could not parse scores from the image. Try another photo.");
-  }
-
-  return normalizeGeminiScorecardResponse(payload, knownPlayers);
+  const detail =
+    lastError instanceof Error ? lastError.message : "Model unavailable.";
+  throw new Error(
+    `No Gemini vision model is available for this API key. Set GEMINI_MODEL in .env (try ${DEFAULT_GEMINI_MODEL}). ${detail}`,
+  );
 }
 
 export function mergeScannedIntoEntryPlayers(
